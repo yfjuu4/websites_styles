@@ -36,7 +36,7 @@ const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
         // FIXED: Changed %2520 to %20 (was double-encoded)
-        styleURL: 'https://gist.githubusercontent.com/yfjuu4/8423265dc6454be1779e6f81bfc44026/raw/d2a4201a8bf4bf62c4a20b8c70cbbb60e4e8b78f/ChatGpt%20style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/ChatGpt%20style.css',
         styleID: 'chatgpt-enhanced-styles',
         enabledKey: 'chatgpt_styles_enabled',
         // ChatGPT-specific settings
@@ -46,7 +46,7 @@ const SITES = {
     },
     'claude.ai': {
         name: 'Claude AI',
-        styleURL: 'https://gist.githubusercontent.com/yfjuu4/bebc583d9a0fcf72a8068cd911701b42/raw/a9adba3d9e61879567b4a74994c6e05ec6fec2cc/Claude%20AI%20style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/Claude%20AI%20style.css',
         styleID: 'claude-enhanced-styles',
         enabledKey: 'claude_styles_enabled',
         needsReadyCheck: false,
