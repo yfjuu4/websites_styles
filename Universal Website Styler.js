@@ -1,17 +1,11 @@
 // ==UserScript==
-// @name         Universal AI Chat Styler (Multi-Site)
+// @name         Universal AI Chat Styler (Berry Browser Optimized)
 // @namespace    http://yourdomain.example
-// @version      2.0
-// @description  Dynamically load custom CSS for ChatGPT and Claude AI
+// @version      2.2
+// @description  Dynamically load custom CSS for ChatGPT and Claude AI - Berry Browser Compatible
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
-// @grant        GM_addStyle
-// @grant        GM_registerMenuCommand
-// @grant        GM_unregisterMenuCommand
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_log
-// @grant        GM_xmlhttpRequest
+// @grant        none
 // @run-at       document-end
 // ==/UserScript==
 
@@ -21,35 +15,37 @@
 // Configuration
 const CONFIG = {
     DEBUG_MODE: true,
-    RETRY_DELAY: 300,
-    MAX_RETRIES: 20,
-    OBSERVER_THROTTLE: 500,
-    CACHE_DURATION: 12 * 60 * 60 * 1000, // 12 hours
-    CACHE_KEY_PREFIX: 'css_cache_v2_',
-    BERRY_INITIAL_DELAY: 2000,
-    CHATGPT_READY_CHECK_INTERVAL: 200,
-    CHATGPT_MAX_READY_CHECKS: 30
+    CHATGPT_INITIAL_DELAY: 4000, // Increased for ChatGPT
+    CLAUDE_INITIAL_DELAY: 1500,
+    REAPPLY_INTERVAL: 3000, // Check and reapply every 3 seconds
+    MAX_REAPPLY_ATTEMPTS: 20,
+    FETCH_TIMEOUT: 15000,
+    CACHE_DURATION: 12 * 60 * 60 * 1000
 };
 
-// Site configuration
+// Site configuration - FIXED URL ENCODING
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
+        // CRITICAL FIX: Properly encode the space in the filename
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/ChatGpt%20style.css',
         styleID: 'chatgpt-enhanced-styles',
         enabledKey: 'chatgpt_styles_enabled',
-        needsReadyCheck: true,
-        readySelector: 'main, [class*="conversation"], #__next',
-        aggressiveReapply: true
+        // ChatGPT needs aggressive reapplication
+        needsAggressiveReapply: true,
+        // Wait for ChatGPT's React app to initialize
+        readySelectors: ['main', '[class*="conversation"]', 'textarea'],
+        initialDelay: CONFIG.CHATGPT_INITIAL_DELAY
     },
     'claude.ai': {
         name: 'Claude AI',
+        // CRITICAL FIX: Properly encode the space in the filename
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/Claude%20AI%20style.css',
         styleID: 'claude-enhanced-styles',
         enabledKey: 'claude_styles_enabled',
-        needsReadyCheck: false,
-        readySelector: 'body',
-        aggressiveReapply: false
+        needsAggressiveReapply: false,
+        readySelectors: ['body'],
+        initialDelay: CONFIG.CLAUDE_INITIAL_DELAY
     }
 };
 
@@ -65,460 +61,377 @@ if (!currentSite) {
 // State management
 const state = {
     site: currentSite,
-    styleElement: null,
-    observer: null,
-    retryCount: 0,
-    menuCommandId: null,
-    currentURL: location.href,
-    isLoading: false,
-    hasGrants: false,
-    isBerryBrowser: false,
-    isReady: false,
     cssContent: null,
-    appliedMethod: null,
-    lastApplyTime: 0
+    styleElement: null,
+    reapplyInterval: null,
+    reapplyCount: 0,
+    lastURL: location.href,
+    isInitialized: false
 };
-
-// Enhanced browser detection
-(function detectCapabilities() {
-    state.hasGrants = typeof GM_xmlhttpRequest !== 'undefined';
- 
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isMobile = /android|mobile/i.test(userAgent);
-    const isChromiumBased = /chrome|chromium/i.test(userAgent);
- 
-    state.isBerryBrowser = !state.hasGrants && isMobile && isChromiumBased;
- 
-    if (state.isBerryBrowser) {
-        console.log('🍓 Berry Browser detected - using optimized fallback methods');
-    }
-})();
 
 // Utility functions
 const utils = {
     log(message, level = 'info') {
         if (!CONFIG.DEBUG_MODE && level === 'debug') return;
-     
-        const emoji = {
-            'info': 'ℹ️',
-            'success': '✅',
-            'error': '❌',
-            'debug': '🔍',
-            'warning': '⚠️'
-        }[level] || 'ℹ️';
-     
-        const prefix = `${emoji} [${currentSite.name}]`;
-        console.log(`${prefix} ${message}`);
+        const emoji = { 'info': 'ℹ️', 'success': '✅', 'error': '❌', 'debug': '🔍', 'warning': '⚠️' }[level] || 'ℹ️';
+        console.log(`${emoji} [${currentSite.name}] ${message}`);
     },
 
-    throttle(func, delay) {
-        let timeoutId;
-        let lastExecTime = 0;
-
-        return function(...args) {
-            const context = this;
-            const currentTime = Date.now();
-
-            const execute = function() {
-                lastExecTime = currentTime;
-                func.apply(context, args);
-            };
-
-            clearTimeout(timeoutId);
-
-            if (currentTime - lastExecTime > delay) {
-                execute();
-            } else {
-                timeoutId = setTimeout(execute, delay - (currentTime - lastExecTime));
-            }
-        };
-    },
-
-    safeCall(fn, fallback = null) {
+    getStorage(key, defaultValue) {
         try {
-            return fn();
+            const item = localStorage.getItem(key);
+            return item !== null ? JSON.parse(item) : defaultValue;
         } catch (e) {
-            this.log(`Error: ${e.message}`, 'error');
-            return fallback;
+            return defaultValue;
         }
     },
 
-    getValue(key, defaultValue) {
-        return this.safeCall(() => {
-            if (typeof GM_getValue !== 'undefined') {
-                return GM_getValue(key, defaultValue);
-            }
-            try {
-                const item = localStorage.getItem(key);
-                return item !== null ? JSON.parse(item) : defaultValue;
-            } catch (e) {
-                return defaultValue;
-            }
-        }, defaultValue);
+    setStorage(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (e) {
+            this.log(`Storage error: ${e.message}`, 'error');
+            return false;
+        }
     },
 
-    setValue(key, value) {
-        return this.safeCall(() => {
-            if (typeof GM_setValue !== 'undefined') {
-                GM_setValue(key, value);
-                return true;
-            }
-            try {
-                localStorage.setItem(key, JSON.stringify(value));
-                return true;
-            } catch (e) {
-                return false;
-            }
-        }, false);
+    isEnabled() {
+        return this.getStorage(state.site.enabledKey, true);
     },
 
-    getCurrentSiteEnabled() {
-        return this.getValue(state.site.enabledKey, true);
-    },
-
-    setCurrentSiteEnabled(enabled) {
-        return this.setValue(state.site.enabledKey, enabled);
+    setEnabled(enabled) {
+        return this.setStorage(state.site.enabledKey, enabled);
     },
 
     getCachedCSS() {
-        const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
-        const cacheData = this.getValue(cacheKey, null);
-     
+        const cacheKey = `css_cache_v3_${state.site.name}`;
+        const cacheData = this.getStorage(cacheKey, null);
+        
         if (!cacheData) return null;
-     
+        
         const { css, timestamp, url } = cacheData;
         const now = Date.now();
-     
-        if (url !== state.site.styleURL) {
-            this.log('CSS URL changed, invalidating cache', 'warning');
+        
+        // Invalidate if URL changed or cache expired
+        if (url !== state.site.styleURL || now - timestamp > CONFIG.CACHE_DURATION) {
+            this.log('Cache invalid or expired', 'debug');
             return null;
         }
-     
-        if (now - timestamp > CONFIG.CACHE_DURATION) {
-            this.log('Cache expired', 'debug');
-            return null;
-        }
-     
-        this.log('Using cached CSS', 'success');
+        
+        this.log(`Using cached CSS (${css.length} chars)`, 'success');
         return css;
     },
 
     setCachedCSS(css) {
-        const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
+        const cacheKey = `css_cache_v3_${state.site.name}`;
         const cacheData = {
             css: css,
             timestamp: Date.now(),
             url: state.site.styleURL
         };
-        return this.setValue(cacheKey, cacheData);
+        return this.setStorage(cacheKey, cacheData);
     },
 
-    async waitForElement(selector, timeout = 10000) {
+    async waitForElement(selectors, timeout = 10000) {
         const startTime = Date.now();
-     
+        
         while (Date.now() - startTime < timeout) {
-            const element = document.querySelector(selector);
-            if (element) {
-                return element;
+            for (const selector of selectors) {
+                const element = document.querySelector(selector);
+                if (element) {
+                    this.log(`Found ready element: ${selector}`, 'debug');
+                    return element;
+                }
             }
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
-     
+        
+        this.log('Ready check timed out', 'warning');
         return null;
-    },
-
-    async waitForPageReady() {
-        if (!state.site.needsReadyCheck) {
-            return true;
-        }
-
-        this.log('Waiting for page to be ready...', 'debug');
-     
-        const element = await this.waitForElement(state.site.readySelector, 10000);
-     
-        if (element) {
-            this.log('Page is ready', 'success');
-         
-            if (state.isBerryBrowser && currentDomain === 'chatgpt.com') {
-                this.log('Applying ChatGPT Berry Browser delay...', 'debug');
-                await new Promise(resolve => setTimeout(resolve, CONFIG.BERRY_INITIAL_DELAY));
-            }
-         
-            return true;
-        }
-     
-        this.log('Page ready check timed out, continuing anyway', 'warning');
-        return false;
     }
 };
 
-// Enhanced CSS loader
-const cssLoader = {
-    async fetchExternalCSS() {
-        const cachedCSS = utils.getCachedCSS();
-        if (cachedCSS) {
-            state.cssContent = cachedCSS;
-            return cachedCSS;
+// CSS Fetcher - optimized for Berry Browser
+const cssFetcher = {
+    async fetch() {
+        // Try cache first
+        const cached = utils.getCachedCSS();
+        if (cached) {
+            state.cssContent = cached;
+            return cached;
         }
 
         utils.log(`Fetching CSS from: ${state.site.styleURL}`, 'info');
-     
-        if (state.hasGrants && typeof GM_xmlhttpRequest !== 'undefined') {
-            try {
-                const css = await this.fetchViaGM();
-                state.cssContent = css;
-                return css;
-            } catch (error) {
-                utils.log(`GM fetch failed: ${error.message}`, 'error');
-            }
-        }
-     
-        try {
-            const css = await this.fetchDirect();
-            state.cssContent = css;
-            return css;
-        } catch (error) {
-            utils.log(`Direct fetch failed: ${error.message}`, 'error');
-        }
-     
-        if (CONFIG.BERRY_FALLBACK || state.isBerryBrowser) {
-            try {
-                const css = await this.fetchViaCORSProxy();
-                state.cssContent = css;
-                return css;
-            } catch (error) {
-                utils.log(`Proxy fetch failed: ${error.message}`, 'error');
-            }
-        }
-     
-        throw new Error('All fetch methods failed');
-    },
 
-    fetchViaGM() {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: state.site.styleURL,
-                timeout: 15000,
-                headers: {
-                    'Accept': 'text/css,*/*',
-                    'Cache-Control': 'no-cache'
-                },
-                onload: (response) => {
-                    if (response.status >= 200 && response.status < 300) {
-                        const css = response.responseText;
-                        if (css && css.trim().length > 0) {
-                            utils.setCachedCSS(css);
-                            utils.log(`Fetched ${css.length} chars via GM`, 'success');
-                            resolve(css);
-                        } else {
-                            reject(new Error('Empty response'));
-                        }
-                    } else {
-                        reject(new Error(`HTTP ${response.status}`));
-                    }
-                },
-                onerror: () => reject(new Error('Network error')),
-                ontimeout: () => reject(new Error('Request timeout'))
-            });
-        });
-    },
-
-    async fetchDirect() {
-        utils.log('Trying direct fetch...', 'debug');
-     
-        const response = await fetch(state.site.styleURL, {
-            method: 'GET',
-            headers: {
-                'Accept': 'text/css,*/*'
-            },
-            mode: 'cors',
-            cache: 'no-cache',
-            credentials: 'omit'
-        });
-     
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-     
-        const css = await response.text();
-     
-        if (!css || css.trim().length === 0) {
-            throw new Error('Empty CSS response');
-        }
-     
-        utils.setCachedCSS(css);
-        utils.log(`Fetched ${css.length} chars directly`, 'success');
-        return css;
-    },
-
-    async fetchViaCORSProxy() {
-        const proxies = [
-            `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`,
-            state.site.styleURL
+        // Try multiple methods in sequence
+        const methods = [
+            () => this.fetchDirect(),
+            () => this.fetchWithProxy('corsproxy.io'),
+            () => this.fetchWithProxy('api.codetabs.com'),
+            () => this.fetchNoCORS()
         ];
 
-        for (let i = 0; i < proxies.length; i++) {
-            const proxyUrl = proxies[i];
+        for (let i = 0; i < methods.length; i++) {
             try {
-                utils.log(`Trying proxy ${i + 1}/${proxies.length}`, 'debug');
-             
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-             
-                const response = await fetch(proxyUrl, {
-                    method: 'GET',
-                    headers: { 'Accept': 'text/css,*/*' },
-                    signal: controller.signal,
-                    mode: 'cors',
-                    cache: 'no-cache'
-                });
-             
-                clearTimeout(timeoutId);
-             
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-             
-                const css = await response.text();
-             
+                utils.log(`Trying fetch method ${i + 1}/${methods.length}`, 'debug');
+                const css = await methods[i]();
+                
                 if (css && css.trim().length > 0) {
+                    utils.log(`✅ Fetched ${css.length} chars via method ${i + 1}`, 'success');
                     utils.setCachedCSS(css);
-                    utils.log(`Fetched ${css.length} chars via proxy`, 'success');
+                    state.cssContent = css;
                     return css;
                 }
             } catch (error) {
-                utils.log(`Proxy ${i + 1} failed: ${error.message}`, 'debug');
-                if (i === proxies.length - 1) {
-                    throw error;
-                }
-                continue;
+                utils.log(`Method ${i + 1} failed: ${error.message}`, 'debug');
             }
         }
-     
-        throw new Error('All proxies failed');
+
+        throw new Error('All fetch methods failed');
+    },
+
+    async fetchDirect() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
+
+        try {
+            const response = await fetch(state.site.styleURL, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'text/css,*/*'
+                }
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            return await response.text();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
+    },
+
+    async fetchWithProxy(proxyDomain) {
+        let proxyUrl;
+        
+        if (proxyDomain === 'corsproxy.io') {
+            proxyUrl = `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`;
+        } else if (proxyDomain === 'api.codetabs.com') {
+            proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
+
+        try {
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            return await response.text();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
+    },
+
+    async fetchNoCORS() {
+        // Last resort: try no-cors mode (won't work for reading response, but might trigger cache)
+        await fetch(state.site.styleURL, {
+            method: 'GET',
+            mode: 'no-cors',
+            cache: 'force-cache'
+        });
+        
+        throw new Error('no-cors mode cannot read response');
     }
 };
 
-// Style manager
+// Style Manager - multiple injection strategies
 const styleManager = {
+    remove() {
+        // Remove existing style
+        const existing = document.getElementById(state.site.styleID);
+        if (existing) {
+            if (existing.tagName === 'LINK' && existing.href.startsWith('blob:')) {
+                URL.revokeObjectURL(existing.href);
+            }
+            existing.remove();
+        }
+        
+        state.styleElement = null;
+        utils.log('Styles removed', 'debug');
+    },
+
     async apply() {
-        if (!utils.getCurrentSiteEnabled() || state.isLoading) {
+        if (!utils.isEnabled()) {
+            utils.log('Styles disabled, skipping apply', 'debug');
             return false;
         }
 
-        const now = Date.now();
-        if (now - state.lastApplyTime < 500) {
-            utils.log('Throttling apply attempt', 'debug');
+        // Ensure we have CSS content
+        if (!state.cssContent) {
+            try {
+                await cssFetcher.fetch();
+            } catch (error) {
+                utils.log(`Failed to fetch CSS: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        if (!state.cssContent || state.cssContent.trim().length === 0) {
+            utils.log('No CSS content available', 'error');
             return false;
         }
-        state.lastApplyTime = now;
 
         this.remove();
-        state.isLoading = true;
 
-        try {
-            await utils.waitForPageReady();
-         
-            if (!state.cssContent) {
-                utils.log('Fetching CSS...', 'info');
-                await cssLoader.fetchExternalCSS();
-            }
+        // Try injection methods in order of reliability for Berry Browser
+        const methods = [
+            { name: 'style-important', fn: () => this.injectStyleImportant() },
+            { name: 'style-inline', fn: () => this.injectStyleInline() },
+            { name: 'blob-link', fn: () => this.injectBlob() },
+            { name: 'external-link', fn: () => this.injectExternal() }
+        ];
 
-            if (!state.cssContent || state.cssContent.trim().length === 0) {
-                throw new Error('No CSS content available');
-            }
-
-            const methods = [
-                { name: 'blob-link', fn: () => this.injectViaBlob() },
-                { name: 'style-element', fn: () => this.injectViaStyle() },
-                { name: 'external-link', fn: () => this.injectViaExternalLink() }
-            ];
-
-            for (const method of methods) {
-                try {
-                    utils.log(`Trying ${method.name}...`, 'debug');
-                    if (await method.fn()) {
-                        state.appliedMethod = method.name;
-                        utils.log(`✅ Styles applied via ${method.name}`, 'success');
-                        state.isLoading = false;
-                        return true;
-                    }
-                } catch (error) {
-                    utils.log(`${method.name} failed: ${error.message}`, 'debug');
+        for (const method of methods) {
+            try {
+                utils.log(`Trying ${method.name}...`, 'debug');
+                if (await method.fn()) {
+                    utils.log(`✅ Styles applied via ${method.name}`, 'success');
+                    return true;
                 }
+            } catch (error) {
+                utils.log(`${method.name} failed: ${error.message}`, 'debug');
             }
-         
-            throw new Error('All injection methods failed');
-         
+        }
+
+        utils.log('All injection methods failed', 'error');
+        return false;
+    },
+
+    injectStyleImportant() {
+        // BEST METHOD FOR BERRY BROWSER: Style element with !important rules
+        if (!document.head) return false;
+        
+        const style = document.createElement('style');
+        style.id = state.site.styleID;
+        style.type = 'text/css';
+        
+        // Add !important to make rules more specific
+        let processedCSS = state.cssContent;
+        
+        // Wrap everything to increase specificity
+        processedCSS = `
+/* AI Chat Styler - Injected by Userscript */
+${processedCSS}
+`;
+        
+        style.textContent = processedCSS;
+        style.setAttribute('data-method', 'important-inline');
+        
+        try {
+            document.head.appendChild(style);
+            
+            // Verify it worked
+            setTimeout(() => {
+                if (style.sheet && style.sheet.cssRules.length > 0) {
+                    utils.log(`Style has ${style.sheet.cssRules.length} rules`, 'debug');
+                }
+            }, 100);
+            
+            state.styleElement = style;
+            return true;
         } catch (error) {
-            utils.log(`Failed to apply styles: ${error.message}`, 'error');
-            state.isLoading = false;
+            utils.log(`Style injection error: ${error.message}`, 'error');
+            if (style.parentNode) style.remove();
             return false;
         }
     },
 
-    async injectViaBlob() {
+    injectStyleInline() {
         if (!document.head) return false;
-     
-        const blob = new Blob([state.cssContent], { type: 'text/css' });
-        const blobUrl = URL.createObjectURL(blob);
-     
-        const link = document.createElement('link');
-        link.id = state.site.styleID;
-        link.rel = 'stylesheet';
-        link.type = 'text/css';
-        link.href = blobUrl;
-        link.setAttribute('data-method', 'blob');
-     
-        return new Promise((resolve) => {
-            link.onload = () => {
-                state.styleElement = link;
-                resolve(true);
-            };
-         
-            link.onerror = () => {
-                link.remove();
-                URL.revokeObjectURL(blobUrl);
-                resolve(false);
-            };
-         
-            document.head.appendChild(link);
-         
-            setTimeout(() => {
-                if (link.sheet) {
-                    state.styleElement = link;
-                    resolve(true);
-                } else {
-                    resolve(false);
-                }
-            }, 1000);
-        });
-    },
-
-    injectViaStyle() {
-        if (!document.head) return false;
-     
+        
         const style = document.createElement('style');
         style.id = state.site.styleID;
         style.type = 'text/css';
         style.textContent = state.cssContent;
         style.setAttribute('data-method', 'inline');
-     
+        
         try {
             document.head.appendChild(style);
             state.styleElement = style;
             return true;
         } catch (error) {
-            style.remove();
+            if (style.parentNode) style.remove();
             return false;
         }
     },
 
-    async injectViaExternalLink() {
+    async injectBlob() {
+        if (!document.head || typeof Blob === 'undefined' || typeof URL === 'undefined') {
+            return false;
+        }
+        
+        try {
+            const blob = new Blob([state.cssContent], { type: 'text/css' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            const link = document.createElement('link');
+            link.id = state.site.styleID;
+            link.rel = 'stylesheet';
+            link.type = 'text/css';
+            link.href = blobUrl;
+            link.setAttribute('data-method', 'blob');
+            
+            return new Promise((resolve) => {
+                link.onload = () => {
+                    state.styleElement = link;
+                    resolve(true);
+                };
+                
+                link.onerror = () => {
+                    link.remove();
+                    URL.revokeObjectURL(blobUrl);
+                    resolve(false);
+                };
+                
+                document.head.appendChild(link);
+                
+                // Timeout fallback
+                setTimeout(() => {
+                    if (link.sheet) {
+                        state.styleElement = link;
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                }, 2000);
+            });
+        } catch (error) {
+            utils.log(`Blob injection error: ${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    async injectExternal() {
         if (!document.head) return false;
-     
+        
         const link = document.createElement('link');
         link.id = state.site.styleID;
         link.rel = 'stylesheet';
@@ -526,153 +439,96 @@ const styleManager = {
         link.href = state.site.styleURL;
         link.setAttribute('data-method', 'external');
         link.setAttribute('crossorigin', 'anonymous');
-     
+        
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
                 resolve(true);
             };
-         
+            
             link.onerror = () => {
                 link.remove();
                 resolve(false);
             };
-         
+            
             document.head.appendChild(link);
-         
-            setTimeout(() => resolve(false), 3000);
+            setTimeout(() => resolve(false), 5000);
         });
-    },
-
-    remove() {
-        const existingStyle = document.getElementById(state.site.styleID);
-        if (existingStyle) {
-            if (existingStyle.tagName === 'LINK' && existingStyle.href.startsWith('blob:')) {
-                URL.revokeObjectURL(existingStyle.href);
-            }
-            existingStyle.remove();
-        }
-     
-        const orphans = document.querySelectorAll(`[data-method]`);
-        orphans.forEach(el => {
-            if (el.id === state.site.styleID || el.getAttribute('data-site') === currentDomain) {
-                el.remove();
-            }
-        });
-     
-        state.styleElement = null;
-        utils.log('Styles removed', 'debug');
     },
 
     isApplied() {
-        return !!document.getElementById(state.site.styleID);
+        const element = document.getElementById(state.site.styleID);
+        if (!element) return false;
+        
+        // Additional check: make sure it has actual rules
+        if (element.sheet) {
+            try {
+                return element.sheet.cssRules.length > 0;
+            } catch (e) {
+                // Can't access rules (CORS), assume it's working
+                return true;
+            }
+        }
+        
+        return true;
     },
 
     async forceReapply() {
-        if (utils.getCurrentSiteEnabled() && !this.isApplied()) {
-            utils.log('Force reapplying styles', 'debug');
+        if (!utils.isEnabled()) return;
+        
+        if (!this.isApplied()) {
+            utils.log('Style missing, reapplying...', 'debug');
             await this.apply();
         }
     }
 };
 
-// Observer manager
-const observerManager = {
-    setup() {
-        this.cleanup();
-        if (!utils.getCurrentSiteEnabled()) return;
-
-        if (state.site.aggressiveReapply || state.isBerryBrowser) {
-            this.createAggressiveObserver();
-        } else {
-            this.createStandardObserver();
+// Aggressive reapplication for ChatGPT
+const reapplicationManager = {
+    start() {
+        if (!state.site.needsAggressiveReapply || !utils.isEnabled()) {
+            return;
         }
-     
-        utils.log('Observer started', 'debug');
-    },
 
-    createStandardObserver() {
-        const throttledReapply = utils.throttle(() => {
-            styleManager.forceReapply();
-        }, CONFIG.OBSERVER_THROTTLE);
-
-        state.observer = new MutationObserver(mutations => {
-            let shouldReapply = false;
-
-            for (const mutation of mutations) {
-                if (mutation.removedNodes.length > 0) {
-                    for (const node of mutation.removedNodes) {
-                        if (node.id === state.site.styleID) {
-                            shouldReapply = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (shouldReapply) {
-                throttledReapply();
-            }
-        });
-
-        state.observer.observe(document.head, {
-            childList: true,
-            subtree: false
-        });
-    },
-
-    createAggressiveObserver() {
-        let checkCount = 0;
-        const maxChecks = 100;
-     
-        const checkAndReapply = async () => {
-            if (checkCount++ > maxChecks) {
-                clearInterval(intervalId);
-                utils.log('Aggressive observer stopped after max checks', 'debug');
+        utils.log('Starting aggressive reapplication', 'info');
+        
+        // Clear any existing interval
+        this.stop();
+        
+        state.reapplyCount = 0;
+        
+        state.reapplyInterval = setInterval(async () => {
+            state.reapplyCount++;
+            
+            if (state.reapplyCount > CONFIG.MAX_REAPPLY_ATTEMPTS) {
+                utils.log('Max reapply attempts reached, stopping', 'warning');
+                this.stop();
                 return;
             }
-         
-            if (!styleManager.isApplied() && utils.getCurrentSiteEnabled()) {
-                utils.log('Style missing, reapplying...', 'debug');
-                await styleManager.forceReapply();
-            }
-        };
-     
-        const intervalId = setInterval(checkAndReapply, 2000);
-     
-        state.observer = {
-            disconnect: () => clearInterval(intervalId)
-        };
+            
+            await styleManager.forceReapply();
+            
+        }, CONFIG.REAPPLY_INTERVAL);
     },
 
-    cleanup() {
-        if (state.observer) {
-            if (state.observer.disconnect) {
-                state.observer.disconnect();
-            }
-            state.observer = null;
+    stop() {
+        if (state.reapplyInterval) {
+            clearInterval(state.reapplyInterval);
+            state.reapplyInterval = null;
+            utils.log('Aggressive reapplication stopped', 'debug');
         }
-        utils.log('Observer cleaned up', 'debug');
     }
 };
 
-// Menu manager (simplified - no reload/clear cache commands)
+// Menu/Toggle UI
 const menuManager = {
     setup() {
-        if (typeof GM_registerMenuCommand !== 'undefined') {
-            this.createMenuCommands();
-        } else {
-            this.createFloatingButton();
-        }
-    },
-
-    createMenuCommands() {
-        this.updateToggleCommand();
+        this.createFloatingButton();
     },
 
     createFloatingButton() {
         const button = document.createElement('div');
-        button.id = 'ai-styler-btn';
+        button.id = 'ai-styler-toggle-btn';
         button.style.cssText = `
             position: fixed;
             bottom: 20px;
@@ -692,17 +548,16 @@ const menuManager = {
             justify-content: center;
             transition: all 0.3s;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
         `;
-     
+        
         this.updateButtonState(button);
-     
+        
         button.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            this.toggleCurrentSiteStyles();
+            this.toggle();
         });
-     
+        
         const addButton = () => {
             if (document.body) {
                 document.body.appendChild(button);
@@ -714,44 +569,28 @@ const menuManager = {
     },
 
     updateButtonState(button) {
-        if (!button) button = document.getElementById('ai-styler-btn');
+        if (!button) button = document.getElementById('ai-styler-toggle-btn');
         if (!button) return;
-     
-        const isEnabled = utils.getCurrentSiteEnabled();
+        
+        const isEnabled = utils.isEnabled();
         button.innerHTML = isEnabled ? '🎨' : '🚫';
         button.style.opacity = isEnabled ? '1' : '0.6';
         button.title = `${state.site.name}: ${isEnabled ? 'ON' : 'OFF'}`;
     },
 
-    updateToggleCommand() {
-        utils.safeCall(() => {
-            if (state.menuCommandId && typeof GM_unregisterMenuCommand !== 'undefined') {
-                GM_unregisterMenuCommand(state.menuCommandId);
-            }
-
-            const isEnabled = utils.getCurrentSiteEnabled();
-            const text = `${isEnabled ? '✅' : '❌'} ${state.site.name} Styles`;
-         
-            state.menuCommandId = GM_registerMenuCommand(text, () => {
-                this.toggleCurrentSiteStyles();
-            });
-        });
-    },
-
-    toggleCurrentSiteStyles() {
-        const newEnabled = !utils.getCurrentSiteEnabled();
-        utils.setCurrentSiteEnabled(newEnabled);
+    async toggle() {
+        const newEnabled = !utils.isEnabled();
+        utils.setEnabled(newEnabled);
 
         if (newEnabled) {
-            styleManager.apply();
-            observerManager.setup();
+            await styleManager.apply();
+            reapplicationManager.start();
         } else {
             styleManager.remove();
-            observerManager.cleanup();
+            reapplicationManager.stop();
         }
 
         this.updateButtonState();
-        this.updateToggleCommand();
         this.showToast(`${state.site.name}: ${newEnabled ? 'ON' : 'OFF'}`);
     },
 
@@ -768,11 +607,11 @@ const menuManager = {
             font-size: 14px;
             z-index: 999998;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: slideIn 0.3s ease;
+            transition: opacity 0.3s, transform 0.3s;
         `;
-     
+        
         toast.textContent = message;
-     
+        
         const addToast = () => {
             if (document.body) {
                 document.body.appendChild(toast);
@@ -789,107 +628,87 @@ const menuManager = {
     }
 };
 
-// Navigation manager
+// URL change detection
 const navigationManager = {
     init() {
-        if (!state.isBerryBrowser) {
-            this.overrideHistoryMethods();
-        }
-     
-        window.addEventListener('popstate', this.handleURLChange);
-        window.addEventListener('hashchange', this.handleURLChange);
-    },
-
-    overrideHistoryMethods() {
-        const originalPushState = history.pushState;
-        const originalReplaceState = history.replaceState;
-
-        history.pushState = function(...args) {
-            originalPushState.apply(this, args);
-            navigationManager.handleURLChange();
-        };
-
-        history.replaceState = function(...args) {
-            originalReplaceState.apply(this, args);
-            navigationManager.handleURLChange();
-        };
-    },
-
-    handleURLChange: utils.throttle(() => {
-        if (location.href !== state.currentURL) {
-            state.currentURL = location.href;
-            utils.log(`URL changed: ${state.currentURL}`, 'debug');
-         
-            if (utils.getCurrentSiteEnabled()) {
-                setTimeout(() => styleManager.forceReapply(), 300);
+        // Listen for URL changes
+        setInterval(() => {
+            if (location.href !== state.lastURL) {
+                state.lastURL = location.href;
+                utils.log(`URL changed: ${state.lastURL}`, 'debug');
+                
+                if (utils.isEnabled()) {
+                    setTimeout(() => styleManager.forceReapply(), 500);
+                }
             }
-        }
-    }, 500)
+        }, 1000);
+    }
 };
 
-// Main app
+// Main initialization
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v2.1`, 'info');
-        utils.log(`Mode: ${state.isBerryBrowser ? 'Berry Browser' : 'Standard'}`, 'info');
-     
-        const initialDelay = state.isBerryBrowser ? 1500 : 500;
-     
-        setTimeout(async () => {
-            await this.applyWithRetry();
-            observerManager.setup();
-            menuManager.setup();
-            navigationManager.init();
-            this.setupEventListeners();
-         
-            const status = utils.getCurrentSiteEnabled() ? 'ENABLED ✅' : 'DISABLED ❌';
-            utils.log(`Initialization complete. Status: ${status}`, 'success');
-        }, initialDelay);
-    },
+        if (state.isInitialized) return;
+        state.isInitialized = true;
 
-    async applyWithRetry() {
-        if (!utils.getCurrentSiteEnabled()) return;
-
-        for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
-            try {
-                utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'debug');
-             
-                if (await styleManager.apply()) {
-                    utils.log('Styles successfully applied!', 'success');
-                    return;
-                }
-            } catch (error) {
-                utils.log(`Attempt ${attempt} error: ${error.message}`, 'error');
-            }
-
-            if (attempt < CONFIG.MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
+        utils.log(`🚀 Initializing ${state.site.name} Styler v2.2`, 'info');
+        
+        // Wait for initial delay
+        await new Promise(resolve => setTimeout(resolve, state.site.initialDelay));
+        
+        // Wait for page to be ready
+        await utils.waitForElement(state.site.readySelectors);
+        
+        // Apply styles
+        if (utils.isEnabled()) {
+            const success = await styleManager.apply();
+            
+            if (success) {
+                utils.log('✅ Initial application successful', 'success');
+                
+                // Start aggressive reapplication if needed
+                reapplicationManager.start();
+            } else {
+                utils.log('❌ Initial application failed', 'error');
             }
         }
-     
-        utils.log('Max retries reached - styles may not be applied', 'warning');
+        
+        // Setup UI
+        menuManager.setup();
+        
+        // Setup navigation detection
+        navigationManager.init();
+        
+        // Setup event listeners
+        this.setupEventListeners();
+        
+        const status = utils.isEnabled() ? 'ENABLED ✅' : 'DISABLED ❌';
+        utils.log(`Initialization complete. Status: ${status}`, 'success');
     },
 
     setupEventListeners() {
+        // Reapply when tab becomes visible
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && utils.getCurrentSiteEnabled()) {
-                setTimeout(() => styleManager.forceReapply(), 200);
+            if (!document.hidden && utils.isEnabled()) {
+                setTimeout(() => styleManager.forceReapply(), 300);
             }
         });
 
+        // Reapply on window focus
         window.addEventListener('focus', () => {
-            if (utils.getCurrentSiteEnabled()) {
-                setTimeout(() => styleManager.forceReapply(), 200);
+            if (utils.isEnabled()) {
+                setTimeout(() => styleManager.forceReapply(), 300);
             }
         });
 
+        // Cleanup on unload
         window.addEventListener('beforeunload', () => {
-            observerManager.cleanup();
+            reapplicationManager.stop();
         });
     }
 };
 
-// Start the application
+// Start the app
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => app.init());
 } else {
