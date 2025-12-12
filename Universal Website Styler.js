@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         AI Chat Styler (Multi-Site) - Berry Fixed
+// @name         Universal AI Chat Styler (Multi-Site)
 // @namespace    http://yourdomain.example
 // @version      2.0
-// @description  Dynamically load custom CSS for ChatGPT and Claude AI (Berry Browser optimized)
+// @description  Dynamically load custom CSS for ChatGPT and Claude AI
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @grant        GM_addStyle
@@ -26,20 +26,18 @@ const CONFIG = {
     OBSERVER_THROTTLE: 500,
     CACHE_DURATION: 12 * 60 * 60 * 1000, // 12 hours
     CACHE_KEY_PREFIX: 'css_cache_v2_',
-    BERRY_INITIAL_DELAY: 2000, // Extra delay for Berry Browser on ChatGPT
+    BERRY_INITIAL_DELAY: 2000,
     CHATGPT_READY_CHECK_INTERVAL: 200,
     CHATGPT_MAX_READY_CHECKS: 30
 };
 
-// Site configuration with CORRECTED URLs
+// Site configuration
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
-        // FIXED: Changed %2520 to %20 (was double-encoded)
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/ChatGpt%20style.css',
         styleID: 'chatgpt-enhanced-styles',
         enabledKey: 'chatgpt_styles_enabled',
-        // ChatGPT-specific settings
         needsReadyCheck: true,
         readySelector: 'main, [class*="conversation"], #__next',
         aggressiveReapply: true
@@ -84,14 +82,13 @@ const state = {
 // Enhanced browser detection
 (function detectCapabilities() {
     state.hasGrants = typeof GM_xmlhttpRequest !== 'undefined';
-   
-    // Better Berry Browser detection
+ 
     const userAgent = navigator.userAgent.toLowerCase();
     const isMobile = /android|mobile/i.test(userAgent);
     const isChromiumBased = /chrome|chromium/i.test(userAgent);
-   
+ 
     state.isBerryBrowser = !state.hasGrants && isMobile && isChromiumBased;
-   
+ 
     if (state.isBerryBrowser) {
         console.log('🍓 Berry Browser detected - using optimized fallback methods');
     }
@@ -101,7 +98,7 @@ const state = {
 const utils = {
     log(message, level = 'info') {
         if (!CONFIG.DEBUG_MODE && level === 'debug') return;
-       
+     
         const emoji = {
             'info': 'ℹ️',
             'success': '✅',
@@ -109,7 +106,7 @@ const utils = {
             'debug': '🔍',
             'warning': '⚠️'
         }[level] || 'ℹ️';
-       
+     
         const prefix = `${emoji} [${currentSite.name}]`;
         console.log(`${prefix} ${message}`);
     },
@@ -186,23 +183,22 @@ const utils = {
     getCachedCSS() {
         const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
         const cacheData = this.getValue(cacheKey, null);
-       
+     
         if (!cacheData) return null;
-       
+     
         const { css, timestamp, url } = cacheData;
         const now = Date.now();
-       
-        // Check if URL has changed
+     
         if (url !== state.site.styleURL) {
             this.log('CSS URL changed, invalidating cache', 'warning');
             return null;
         }
-       
+     
         if (now - timestamp > CONFIG.CACHE_DURATION) {
             this.log('Cache expired', 'debug');
             return null;
         }
-       
+     
         this.log('Using cached CSS', 'success');
         return css;
     },
@@ -217,16 +213,9 @@ const utils = {
         return this.setValue(cacheKey, cacheData);
     },
 
-    clearCache() {
-        const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
-        this.setValue(cacheKey, null);
-        this.log('Cache cleared', 'success');
-    },
-
-    // Wait for DOM to be truly ready
     async waitForElement(selector, timeout = 10000) {
         const startTime = Date.now();
-       
+     
         while (Date.now() - startTime < timeout) {
             const element = document.querySelector(selector);
             if (element) {
@@ -234,42 +223,38 @@ const utils = {
             }
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-       
+     
         return null;
     },
 
-    // Check if page is ready for style injection
     async waitForPageReady() {
         if (!state.site.needsReadyCheck) {
             return true;
         }
 
         this.log('Waiting for page to be ready...', 'debug');
-       
-        // Wait for key elements
+     
         const element = await this.waitForElement(state.site.readySelector, 10000);
-       
+     
         if (element) {
             this.log('Page is ready', 'success');
-           
-            // Extra delay for ChatGPT in Berry Browser
+         
             if (state.isBerryBrowser && currentDomain === 'chatgpt.com') {
                 this.log('Applying ChatGPT Berry Browser delay...', 'debug');
                 await new Promise(resolve => setTimeout(resolve, CONFIG.BERRY_INITIAL_DELAY));
             }
-           
+         
             return true;
         }
-       
+     
         this.log('Page ready check timed out, continuing anyway', 'warning');
         return false;
     }
 };
 
-// Enhanced CSS loader with better error handling
+// Enhanced CSS loader
 const cssLoader = {
     async fetchExternalCSS() {
-        // Check cache first
         const cachedCSS = utils.getCachedCSS();
         if (cachedCSS) {
             state.cssContent = cachedCSS;
@@ -277,8 +262,7 @@ const cssLoader = {
         }
 
         utils.log(`Fetching CSS from: ${state.site.styleURL}`, 'info');
-       
-        // Method 1: GM_xmlhttpRequest (Tampermonkey)
+     
         if (state.hasGrants && typeof GM_xmlhttpRequest !== 'undefined') {
             try {
                 const css = await this.fetchViaGM();
@@ -288,8 +272,7 @@ const cssLoader = {
                 utils.log(`GM fetch failed: ${error.message}`, 'error');
             }
         }
-       
-        // Method 2: Direct fetch (might work with CORS)
+     
         try {
             const css = await this.fetchDirect();
             state.cssContent = css;
@@ -297,8 +280,7 @@ const cssLoader = {
         } catch (error) {
             utils.log(`Direct fetch failed: ${error.message}`, 'error');
         }
-       
-        // Method 3: CORS proxies
+     
         if (CONFIG.BERRY_FALLBACK || state.isBerryBrowser) {
             try {
                 const css = await this.fetchViaCORSProxy();
@@ -308,7 +290,7 @@ const cssLoader = {
                 utils.log(`Proxy fetch failed: ${error.message}`, 'error');
             }
         }
-       
+     
         throw new Error('All fetch methods failed');
     },
 
@@ -344,7 +326,7 @@ const cssLoader = {
 
     async fetchDirect() {
         utils.log('Trying direct fetch...', 'debug');
-       
+     
         const response = await fetch(state.site.styleURL, {
             method: 'GET',
             headers: {
@@ -354,17 +336,17 @@ const cssLoader = {
             cache: 'no-cache',
             credentials: 'omit'
         });
-       
+     
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-       
+     
         const css = await response.text();
-       
+     
         if (!css || css.trim().length === 0) {
             throw new Error('Empty CSS response');
         }
-       
+     
         utils.setCachedCSS(css);
         utils.log(`Fetched ${css.length} chars directly`, 'success');
         return css;
@@ -374,7 +356,6 @@ const cssLoader = {
         const proxies = [
             `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`,
             `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`,
-            // Add the direct URL as last resort
             state.site.styleURL
         ];
 
@@ -382,10 +363,10 @@ const cssLoader = {
             const proxyUrl = proxies[i];
             try {
                 utils.log(`Trying proxy ${i + 1}/${proxies.length}`, 'debug');
-               
+             
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
-               
+             
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: { 'Accept': 'text/css,*/*' },
@@ -393,15 +374,15 @@ const cssLoader = {
                     mode: 'cors',
                     cache: 'no-cache'
                 });
-               
+             
                 clearTimeout(timeoutId);
-               
+             
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-               
+             
                 const css = await response.text();
-               
+             
                 if (css && css.trim().length > 0) {
                     utils.setCachedCSS(css);
                     utils.log(`Fetched ${css.length} chars via proxy`, 'success');
@@ -415,19 +396,18 @@ const cssLoader = {
                 continue;
             }
         }
-       
+     
         throw new Error('All proxies failed');
     }
 };
 
-// Enhanced style manager with multiple injection strategies
+// Style manager
 const styleManager = {
     async apply() {
         if (!utils.getCurrentSiteEnabled() || state.isLoading) {
             return false;
         }
 
-        // Prevent rapid reapplication
         const now = Date.now();
         if (now - state.lastApplyTime < 500) {
             utils.log('Throttling apply attempt', 'debug');
@@ -439,10 +419,8 @@ const styleManager = {
         state.isLoading = true;
 
         try {
-            // Wait for page to be ready (ChatGPT-specific)
             await utils.waitForPageReady();
-           
-            // Get CSS content
+         
             if (!state.cssContent) {
                 utils.log('Fetching CSS...', 'info');
                 await cssLoader.fetchExternalCSS();
@@ -452,7 +430,6 @@ const styleManager = {
                 throw new Error('No CSS content available');
             }
 
-            // Try multiple injection methods
             const methods = [
                 { name: 'blob-link', fn: () => this.injectViaBlob() },
                 { name: 'style-element', fn: () => this.injectViaStyle() },
@@ -472,9 +449,9 @@ const styleManager = {
                     utils.log(`${method.name} failed: ${error.message}`, 'debug');
                 }
             }
-           
+         
             throw new Error('All injection methods failed');
-           
+         
         } catch (error) {
             utils.log(`Failed to apply styles: ${error.message}`, 'error');
             state.isLoading = false;
@@ -484,32 +461,31 @@ const styleManager = {
 
     async injectViaBlob() {
         if (!document.head) return false;
-       
+     
         const blob = new Blob([state.cssContent], { type: 'text/css' });
         const blobUrl = URL.createObjectURL(blob);
-       
+     
         const link = document.createElement('link');
         link.id = state.site.styleID;
         link.rel = 'stylesheet';
         link.type = 'text/css';
         link.href = blobUrl;
         link.setAttribute('data-method', 'blob');
-       
+     
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
                 resolve(true);
             };
-           
+         
             link.onerror = () => {
                 link.remove();
                 URL.revokeObjectURL(blobUrl);
                 resolve(false);
             };
-           
+         
             document.head.appendChild(link);
-           
-            // Fallback check
+         
             setTimeout(() => {
                 if (link.sheet) {
                     state.styleElement = link;
@@ -523,13 +499,13 @@ const styleManager = {
 
     injectViaStyle() {
         if (!document.head) return false;
-       
+     
         const style = document.createElement('style');
         style.id = state.site.styleID;
         style.type = 'text/css';
         style.textContent = state.cssContent;
         style.setAttribute('data-method', 'inline');
-       
+     
         try {
             document.head.appendChild(style);
             state.styleElement = style;
@@ -542,7 +518,7 @@ const styleManager = {
 
     async injectViaExternalLink() {
         if (!document.head) return false;
-       
+     
         const link = document.createElement('link');
         link.id = state.site.styleID;
         link.rel = 'stylesheet';
@@ -550,26 +526,25 @@ const styleManager = {
         link.href = state.site.styleURL;
         link.setAttribute('data-method', 'external');
         link.setAttribute('crossorigin', 'anonymous');
-       
+     
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
                 resolve(true);
             };
-           
+         
             link.onerror = () => {
                 link.remove();
                 resolve(false);
             };
-           
+         
             document.head.appendChild(link);
-           
+         
             setTimeout(() => resolve(false), 3000);
         });
     },
 
     remove() {
-        // Remove by ID
         const existingStyle = document.getElementById(state.site.styleID);
         if (existingStyle) {
             if (existingStyle.tagName === 'LINK' && existingStyle.href.startsWith('blob:')) {
@@ -577,15 +552,14 @@ const styleManager = {
             }
             existingStyle.remove();
         }
-       
-        // Clean up any orphaned elements
+     
         const orphans = document.querySelectorAll(`[data-method]`);
         orphans.forEach(el => {
             if (el.id === state.site.styleID || el.getAttribute('data-site') === currentDomain) {
                 el.remove();
             }
         });
-       
+     
         state.styleElement = null;
         utils.log('Styles removed', 'debug');
     },
@@ -602,7 +576,7 @@ const styleManager = {
     }
 };
 
-// Enhanced observer with site-specific behavior
+// Observer manager
 const observerManager = {
     setup() {
         this.cleanup();
@@ -613,7 +587,7 @@ const observerManager = {
         } else {
             this.createStandardObserver();
         }
-       
+     
         utils.log('Observer started', 'debug');
     },
 
@@ -648,25 +622,24 @@ const observerManager = {
     },
 
     createAggressiveObserver() {
-        // More aggressive checking for ChatGPT and Berry Browser
         let checkCount = 0;
         const maxChecks = 100;
-       
+     
         const checkAndReapply = async () => {
             if (checkCount++ > maxChecks) {
                 clearInterval(intervalId);
                 utils.log('Aggressive observer stopped after max checks', 'debug');
                 return;
             }
-           
+         
             if (!styleManager.isApplied() && utils.getCurrentSiteEnabled()) {
                 utils.log('Style missing, reapplying...', 'debug');
                 await styleManager.forceReapply();
             }
         };
-       
+     
         const intervalId = setInterval(checkAndReapply, 2000);
-       
+     
         state.observer = {
             disconnect: () => clearInterval(intervalId)
         };
@@ -683,7 +656,7 @@ const observerManager = {
     }
 };
 
-// Menu manager with better mobile support
+// Menu manager (simplified - no reload/clear cache commands)
 const menuManager = {
     setup() {
         if (typeof GM_registerMenuCommand !== 'undefined') {
@@ -695,18 +668,6 @@ const menuManager = {
 
     createMenuCommands() {
         this.updateToggleCommand();
-       
-        GM_registerMenuCommand('🔄 Reload CSS', async () => {
-            utils.clearCache();
-            state.cssContent = null;
-            await styleManager.apply();
-            this.showToast('CSS reloaded');
-        });
-       
-        GM_registerMenuCommand('🗑️ Clear Cache', () => {
-            utils.clearCache();
-            this.showToast('Cache cleared');
-        });
     },
 
     createFloatingButton() {
@@ -733,16 +694,15 @@ const menuManager = {
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         `;
-       
+     
         this.updateButtonState(button);
-       
+     
         button.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
             this.toggleCurrentSiteStyles();
         });
-       
-        // Wait for body
+     
         const addButton = () => {
             if (document.body) {
                 document.body.appendChild(button);
@@ -756,7 +716,7 @@ const menuManager = {
     updateButtonState(button) {
         if (!button) button = document.getElementById('ai-styler-btn');
         if (!button) return;
-       
+     
         const isEnabled = utils.getCurrentSiteEnabled();
         button.innerHTML = isEnabled ? '🎨' : '🚫';
         button.style.opacity = isEnabled ? '1' : '0.6';
@@ -771,7 +731,7 @@ const menuManager = {
 
             const isEnabled = utils.getCurrentSiteEnabled();
             const text = `${isEnabled ? '✅' : '❌'} ${state.site.name} Styles`;
-           
+         
             state.menuCommandId = GM_registerMenuCommand(text, () => {
                 this.toggleCurrentSiteStyles();
             });
@@ -810,9 +770,9 @@ const menuManager = {
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             animation: slideIn 0.3s ease;
         `;
-       
+     
         toast.textContent = message;
-       
+     
         const addToast = () => {
             if (document.body) {
                 document.body.appendChild(toast);
@@ -835,7 +795,7 @@ const navigationManager = {
         if (!state.isBerryBrowser) {
             this.overrideHistoryMethods();
         }
-       
+     
         window.addEventListener('popstate', this.handleURLChange);
         window.addEventListener('hashchange', this.handleURLChange);
     },
@@ -859,7 +819,7 @@ const navigationManager = {
         if (location.href !== state.currentURL) {
             state.currentURL = location.href;
             utils.log(`URL changed: ${state.currentURL}`, 'debug');
-           
+         
             if (utils.getCurrentSiteEnabled()) {
                 setTimeout(() => styleManager.forceReapply(), 300);
             }
@@ -870,19 +830,18 @@ const navigationManager = {
 // Main app
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v2.0`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v2.1`, 'info');
         utils.log(`Mode: ${state.isBerryBrowser ? 'Berry Browser' : 'Standard'}`, 'info');
-       
-        // Initial delay for Berry Browser
+     
         const initialDelay = state.isBerryBrowser ? 1500 : 500;
-       
+     
         setTimeout(async () => {
             await this.applyWithRetry();
             observerManager.setup();
             menuManager.setup();
             navigationManager.init();
             this.setupEventListeners();
-           
+         
             const status = utils.getCurrentSiteEnabled() ? 'ENABLED ✅' : 'DISABLED ❌';
             utils.log(`Initialization complete. Status: ${status}`, 'success');
         }, initialDelay);
@@ -894,7 +853,7 @@ const app = {
         for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
             try {
                 utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'debug');
-               
+             
                 if (await styleManager.apply()) {
                     utils.log('Styles successfully applied!', 'success');
                     return;
@@ -907,7 +866,7 @@ const app = {
                 await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
             }
         }
-       
+     
         utils.log('Max retries reached - styles may not be applied', 'warning');
     },
 
