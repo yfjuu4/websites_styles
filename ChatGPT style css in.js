@@ -25,6 +25,7 @@ OBSERVER_THROTTLE: 250
 const USER_CSS = String.raw`
 /* Your CSS styles here */
 /*========================================================*/
+/*========================================================*/
 .md\:px-Mathjax,
 .pt-5,
 .font-bold,
@@ -55,14 +56,12 @@ button[data-testid="share-chat-button"],
 .pt-\(--sidebar-section-first-margin-top\):nth-child(3),
 .sm\:items-center
 ,.mb-\[var\(--sidebar-collapsed-section-margin-bottom\)\]
-,.border-token-border-default
+,.z-30
 {
     display: none !important;
 }
 /*-----------------------------------------*/
-.bottom-full {
-    border: 1px #e10000 solid;
-}
+
 .flex > div > .text-sm {
     font-size: 20px;
 }
@@ -161,9 +160,7 @@ tr:nth-child(1) > .text-left {
     margin-top: 0rem;
     Color: black !important;
 }
-#page-header {
-    display: none;
-}
+
 .rounded {
     border-top: 2px #00a30b solid;
     padding: 0rem;
@@ -685,7 +682,7 @@ li > .cursor-pointer .text-sm {
     margin: 0;
 }
 #prompt-textarea > p {
-    Color: #cd0101;
+    Color: #d1c1c1;
     font-size: 20px;
 }
 #prompt-textarea {
@@ -701,7 +698,11 @@ li > .cursor-pointer .text-sm {
     text-align: center;
     border: 1px #a300a7 solid;
     place-self: center;
+    max-width: -webkit-fill-available;
+    padding-left: 2px;
+    padding-right: 2px;
 }
+
 /*main text input field*/
 /*-----------------------------------------*/
 .pt-3 {
@@ -764,10 +765,6 @@ p > em {
 }
 .\@w-xl\/main\:pt-header-height {
     padding-top: 10px;
-}
-.\@w-lg\/main\:\[--thread-content-max-width\:48rem\] {
-    --thread-content-max-width: 1093px;
-    border: 1px #e10000 solid;
 }
 .composer-submit-btn {
     background-color: #d8cbcb;
