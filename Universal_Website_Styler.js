@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Universal AI Chat Styler (Multi-Site) - Enhanced Berry Debug
+// @name         Universal AI Chat Styler (Multi-Site)
 // @namespace    http://yourdomain.example
-// @version      2.2
-// @description  Dynamically load custom CSS for ChatGPT and Claude AI with Berry Browser debugging
+// @version      2.0
+// @description  Dynamically load custom CSS for ChatGPT and Claude AI
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @grant        GM_addStyle
@@ -20,17 +20,15 @@
 
 // Configuration
 const CONFIG = {
-    DEBUG_MODE: true, // Set to true to see detailed logs
-    VERBOSE_BERRY_DEBUG: true, // Extra logging for Berry Browser
-    RETRY_DELAY: 500,
+    DEBUG_MODE: true,
+    RETRY_DELAY: 300,
     MAX_RETRIES: 20,
     OBSERVER_THROTTLE: 500,
-    CACHE_DURATION: 12 * 60 * 60 * 1000,
+    CACHE_DURATION: 12 * 60 * 60 * 1000, // 12 hours
     CACHE_KEY_PREFIX: 'css_cache_v2_',
-    BERRY_INITIAL_DELAY: 3000, // Increased for ChatGPT
+    BERRY_INITIAL_DELAY: 2000,
     CHATGPT_READY_CHECK_INTERVAL: 200,
-    CHATGPT_MAX_READY_CHECKS: 30,
-    FETCH_TIMEOUT: 15000
+    CHATGPT_MAX_READY_CHECKS: 30
 };
 
 // Site configuration
@@ -41,9 +39,8 @@ const SITES = {
         styleID: 'chatgpt-enhanced-styles',
         enabledKey: 'chatgpt_styles_enabled',
         needsReadyCheck: true,
-        readySelector: 'main, [class*="conversation"], #__next, body',
-        aggressiveReapply: true,
-        berryExtraDelay: 2000 // Extra delay specifically for ChatGPT in Berry
+        readySelector: 'main, [class*="conversation"], #__next',
+        aggressiveReapply: true
     },
     'claude.ai': {
         name: 'Claude AI',
@@ -52,8 +49,7 @@ const SITES = {
         enabledKey: 'claude_styles_enabled',
         needsReadyCheck: false,
         readySelector: 'body',
-        aggressiveReapply: false,
-        berryExtraDelay: 0
+        aggressiveReapply: false
     }
 };
 
@@ -80,9 +76,7 @@ const state = {
     isReady: false,
     cssContent: null,
     appliedMethod: null,
-    lastApplyTime: 0,
-    fetchAttempts: [],
-    diagnosticLog: []
+    lastApplyTime: 0
 };
 
 // Enhanced browser detection
@@ -104,59 +98,17 @@ const state = {
 const utils = {
     log(message, level = 'info') {
         if (!CONFIG.DEBUG_MODE && level === 'debug') return;
-        if (!CONFIG.VERBOSE_BERRY_DEBUG && level === 'berry-debug') return;
     
         const emoji = {
             'info': 'ℹ️',
             'success': '✅',
             'error': '❌',
             'debug': '🔍',
-            'warning': '⚠️',
-            'berry-debug': '🍓'
+            'warning': '⚠️'
         }[level] || 'ℹ️';
     
-        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-        const prefix = `${emoji} [${timestamp}] [${currentSite.name}]`;
-        const fullMessage = `${prefix} ${message}`;
-        
-        console.log(fullMessage);
-        
-        // Store in diagnostic log
-        state.diagnosticLog.push({
-            timestamp: Date.now(),
-            level,
-            message: fullMessage
-        });
-        
-        // Keep only last 50 entries
-        if (state.diagnosticLog.length > 50) {
-            state.diagnosticLog.shift();
-        }
-    },
-
-    getDiagnosticReport() {
-        return {
-            browser: state.isBerryBrowser ? 'Berry Browser' : 'Standard Browser',
-            site: currentSite.name,
-            hasGrants: state.hasGrants,
-            cssContentLength: state.cssContent ? state.cssContent.length : 0,
-            appliedMethod: state.appliedMethod,
-            fetchAttempts: state.fetchAttempts,
-            recentLogs: state.diagnosticLog.slice(-20)
-        };
-    },
-
-    showDiagnosticReport() {
-        const report = this.getDiagnosticReport();
-        console.group('🔍 Diagnostic Report');
-        console.log('Browser:', report.browser);
-        console.log('Site:', report.site);
-        console.log('Has GM Grants:', report.hasGrants);
-        console.log('CSS Content Length:', report.cssContentLength);
-        console.log('Applied Method:', report.appliedMethod);
-        console.log('Fetch Attempts:', report.fetchAttempts);
-        console.log('Recent Logs:', report.recentLogs);
-        console.groupEnd();
+        const prefix = `${emoji} [${currentSite.name}]`;
+        console.log(`${prefix} ${message}`);
     },
 
     throttle(func, delay) {
@@ -247,7 +199,7 @@ const utils = {
             return null;
         }
     
-        this.log(`Using cached CSS (${css.length} chars)`, 'success');
+        this.log('Using cached CSS', 'success');
         return css;
     },
 
@@ -259,12 +211,6 @@ const utils = {
             url: state.site.styleURL
         };
         return this.setValue(cacheKey, cacheData);
-    },
-
-    clearCache() {
-        const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
-        this.setValue(cacheKey, null);
-        this.log('Cache cleared', 'info');
     },
 
     async waitForElement(selector, timeout = 10000) {
@@ -283,24 +229,19 @@ const utils = {
 
     async waitForPageReady() {
         if (!state.site.needsReadyCheck) {
-            this.log('No ready check needed for this site', 'berry-debug');
             return true;
         }
 
-        this.log('Waiting for page to be ready...', 'berry-debug');
+        this.log('Waiting for page to be ready...', 'debug');
     
         const element = await this.waitForElement(state.site.readySelector, 10000);
     
         if (element) {
-            this.log(`Page ready - found: ${element.tagName}`, 'success');
+            this.log('Page is ready', 'success');
         
-            if (state.isBerryBrowser) {
-                const extraDelay = state.site.berryExtraDelay || 0;
-                const totalDelay = CONFIG.BERRY_INITIAL_DELAY + extraDelay;
-                
-                this.log(`Berry Browser: Applying ${totalDelay}ms delay...`, 'berry-debug');
-                await new Promise(resolve => setTimeout(resolve, totalDelay));
-                this.log('Berry Browser delay complete', 'berry-debug');
+            if (state.isBerryBrowser && currentDomain === 'chatgpt.com') {
+                this.log('Applying ChatGPT Berry Browser delay...', 'debug');
+                await new Promise(resolve => setTimeout(resolve, CONFIG.BERRY_INITIAL_DELAY));
             }
         
             return true;
@@ -311,7 +252,7 @@ const utils = {
     }
 };
 
-// Enhanced CSS loader with Berry-specific debugging
+// Enhanced CSS loader
 const cssLoader = {
     async fetchExternalCSS() {
         const cachedCSS = utils.getCachedCSS();
@@ -320,66 +261,45 @@ const cssLoader = {
             return cachedCSS;
         }
 
-        utils.log(`🔄 Starting fetch from: ${state.site.styleURL}`, 'berry-debug');
-        utils.log(`Fetch environment: Berry=${state.isBerryBrowser}, Grants=${state.hasGrants}`, 'berry-debug');
-        
-        const fetchStart = Date.now();
-        
-        // Try methods in order based on environment
-        const methods = state.isBerryBrowser ? 
-            ['fetchDirectWithTimeout', 'fetchViaCORSProxy', 'fetchDirect'] :
-            ['fetchViaGM', 'fetchDirect', 'fetchViaCORSProxy'];
-        
-        for (const methodName of methods) {
+        utils.log(`Fetching CSS from: ${state.site.styleURL}`, 'info');
+    
+        if (state.hasGrants && typeof GM_xmlhttpRequest !== 'undefined') {
             try {
-                utils.log(`Attempting: ${methodName}`, 'berry-debug');
-                const attemptStart = Date.now();
-                
-                const css = await this[methodName]();
-                
-                const attemptDuration = Date.now() - attemptStart;
-                
-                state.fetchAttempts.push({
-                    method: methodName,
-                    success: true,
-                    duration: attemptDuration,
-                    timestamp: Date.now()
-                });
-                
+                const css = await this.fetchViaGM();
                 state.cssContent = css;
-                utils.log(`✅ Success via ${methodName} (${attemptDuration}ms, ${css.length} chars)`, 'success');
                 return css;
             } catch (error) {
-                const attemptDuration = Date.now() - fetchStart;
-                
-                state.fetchAttempts.push({
-                    method: methodName,
-                    success: false,
-                    error: error.message,
-                    duration: attemptDuration,
-                    timestamp: Date.now()
-                });
-                
-                utils.log(`❌ ${methodName} failed: ${error.message}`, 'berry-debug');
+                utils.log(`GM fetch failed: ${error.message}`, 'error');
             }
         }
     
-        const totalDuration = Date.now() - fetchStart;
-        utils.log(`All fetch methods failed after ${totalDuration}ms`, 'error');
-        utils.showDiagnosticReport();
+        try {
+            const css = await this.fetchDirect();
+            state.cssContent = css;
+            return css;
+        } catch (error) {
+            utils.log(`Direct fetch failed: ${error.message}`, 'error');
+        }
+    
+        if (CONFIG.BERRY_FALLBACK || state.isBerryBrowser) {
+            try {
+                const css = await this.fetchViaCORSProxy();
+                state.cssContent = css;
+                return css;
+            } catch (error) {
+                utils.log(`Proxy fetch failed: ${error.message}`, 'error');
+            }
+        }
+    
         throw new Error('All fetch methods failed');
     },
 
     fetchViaGM() {
-        if (!state.hasGrants || typeof GM_xmlhttpRequest === 'undefined') {
-            throw new Error('GM_xmlhttpRequest not available');
-        }
-        
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: state.site.styleURL,
-                timeout: CONFIG.FETCH_TIMEOUT,
+                timeout: 15000,
                 headers: {
                     'Accept': 'text/css,*/*',
                     'Cache-Control': 'no-cache'
@@ -389,6 +309,7 @@ const cssLoader = {
                         const css = response.responseText;
                         if (css && css.trim().length > 0) {
                             utils.setCachedCSS(css);
+                            utils.log(`Fetched ${css.length} chars via GM`, 'success');
                             resolve(css);
                         } else {
                             reject(new Error('Empty response'));
@@ -397,27 +318,24 @@ const cssLoader = {
                         reject(new Error(`HTTP ${response.status}`));
                     }
                 },
-                onerror: (err) => reject(new Error(`Network error: ${err.error || 'unknown'}`)),
+                onerror: () => reject(new Error('Network error')),
                 ontimeout: () => reject(new Error('Request timeout'))
             });
         });
     },
 
     async fetchDirect() {
-        utils.log('🔄 fetchDirect: Starting...', 'berry-debug');
+        utils.log('Trying direct fetch...', 'debug');
     
         const response = await fetch(state.site.styleURL, {
             method: 'GET',
             headers: {
-                'Accept': 'text/css,*/*',
-                'Cache-Control': 'no-cache'
+                'Accept': 'text/css,*/*'
             },
             mode: 'cors',
             cache: 'no-cache',
             credentials: 'omit'
         });
-    
-        utils.log(`fetchDirect: Response status ${response.status}`, 'berry-debug');
     
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -425,62 +343,13 @@ const cssLoader = {
     
         const css = await response.text();
     
-        utils.log(`fetchDirect: Got ${css.length} chars`, 'berry-debug');
-    
         if (!css || css.trim().length === 0) {
             throw new Error('Empty CSS response');
         }
     
         utils.setCachedCSS(css);
+        utils.log(`Fetched ${css.length} chars directly`, 'success');
         return css;
-    },
-
-    async fetchDirectWithTimeout() {
-        utils.log('🔄 fetchDirectWithTimeout: Starting...', 'berry-debug');
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-            utils.log('fetchDirectWithTimeout: Aborting due to timeout', 'berry-debug');
-            controller.abort();
-        }, CONFIG.FETCH_TIMEOUT);
-    
-        try {
-            const response = await fetch(state.site.styleURL, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'text/css,*/*',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                },
-                signal: controller.signal,
-                mode: 'cors',
-                cache: 'no-cache',
-                credentials: 'omit'
-            });
-        
-            clearTimeout(timeoutId);
-        
-            utils.log(`fetchDirectWithTimeout: Response status ${response.status}`, 'berry-debug');
-        
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-        
-            const css = await response.text();
-        
-            utils.log(`fetchDirectWithTimeout: Got ${css.length} chars`, 'berry-debug');
-        
-            if (!css || css.trim().length === 0) {
-                throw new Error('Empty CSS response');
-            }
-        
-            utils.setCachedCSS(css);
-            return css;
-        } catch (error) {
-            clearTimeout(timeoutId);
-            utils.log(`fetchDirectWithTimeout: Error - ${error.message}`, 'berry-debug');
-            throw error;
-        }
     },
 
     async fetchViaCORSProxy() {
@@ -493,7 +362,7 @@ const cssLoader = {
         for (let i = 0; i < proxies.length; i++) {
             const proxyUrl = proxies[i];
             try {
-                utils.log(`🔄 Proxy attempt ${i + 1}/${proxies.length}: ${proxyUrl.substring(0, 60)}...`, 'berry-debug');
+                utils.log(`Trying proxy ${i + 1}/${proxies.length}`, 'debug');
             
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -508,8 +377,6 @@ const cssLoader = {
             
                 clearTimeout(timeoutId);
             
-                utils.log(`Proxy ${i + 1}: Response status ${response.status}`, 'berry-debug');
-            
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -518,11 +385,11 @@ const cssLoader = {
             
                 if (css && css.trim().length > 0) {
                     utils.setCachedCSS(css);
-                    utils.log(`Proxy ${i + 1}: Success (${css.length} chars)`, 'berry-debug');
+                    utils.log(`Fetched ${css.length} chars via proxy`, 'success');
                     return css;
                 }
             } catch (error) {
-                utils.log(`Proxy ${i + 1} failed: ${error.message}`, 'berry-debug');
+                utils.log(`Proxy ${i + 1} failed: ${error.message}`, 'debug');
                 if (i === proxies.length - 1) {
                     throw error;
                 }
@@ -552,15 +419,11 @@ const styleManager = {
         state.isLoading = true;
 
         try {
-            utils.log('🎨 Starting CSS application process...', 'berry-debug');
-            
             await utils.waitForPageReady();
         
             if (!state.cssContent) {
-                utils.log('No cached CSS, fetching...', 'berry-debug');
+                utils.log('Fetching CSS...', 'info');
                 await cssLoader.fetchExternalCSS();
-            } else {
-                utils.log(`Using existing CSS content (${state.cssContent.length} chars)`, 'berry-debug');
             }
 
             if (!state.cssContent || state.cssContent.trim().length === 0) {
@@ -568,14 +431,14 @@ const styleManager = {
             }
 
             const methods = [
-                { name: 'style-element', fn: () => this.injectViaStyle() },
                 { name: 'blob-link', fn: () => this.injectViaBlob() },
+                { name: 'style-element', fn: () => this.injectViaStyle() },
                 { name: 'external-link', fn: () => this.injectViaExternalLink() }
             ];
 
             for (const method of methods) {
                 try {
-                    utils.log(`Trying injection via ${method.name}...`, 'berry-debug');
+                    utils.log(`Trying ${method.name}...`, 'debug');
                     if (await method.fn()) {
                         state.appliedMethod = method.name;
                         utils.log(`✅ Styles applied via ${method.name}`, 'success');
@@ -583,7 +446,7 @@ const styleManager = {
                         return true;
                     }
                 } catch (error) {
-                    utils.log(`${method.name} failed: ${error.message}`, 'berry-debug');
+                    utils.log(`${method.name} failed: ${error.message}`, 'debug');
                 }
             }
         
@@ -592,7 +455,6 @@ const styleManager = {
         } catch (error) {
             utils.log(`Failed to apply styles: ${error.message}`, 'error');
             state.isLoading = false;
-            utils.showDiagnosticReport();
             return false;
         }
     },
@@ -613,12 +475,10 @@ const styleManager = {
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
-                utils.log('Blob link loaded', 'berry-debug');
                 resolve(true);
             };
         
             link.onerror = () => {
-                utils.log('Blob link error', 'berry-debug');
                 link.remove();
                 URL.revokeObjectURL(blobUrl);
                 resolve(false);
@@ -629,10 +489,8 @@ const styleManager = {
             setTimeout(() => {
                 if (link.sheet) {
                     state.styleElement = link;
-                    utils.log('Blob link verified via timeout', 'berry-debug');
                     resolve(true);
                 } else {
-                    utils.log('Blob link failed verification', 'berry-debug');
                     resolve(false);
                 }
             }, 1000);
@@ -651,10 +509,8 @@ const styleManager = {
         try {
             document.head.appendChild(style);
             state.styleElement = style;
-            utils.log('Style element injected', 'berry-debug');
             return true;
         } catch (error) {
-            utils.log(`Style injection error: ${error.message}`, 'berry-debug');
             style.remove();
             return false;
         }
@@ -674,22 +530,17 @@ const styleManager = {
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
-                utils.log('External link loaded', 'berry-debug');
                 resolve(true);
             };
         
             link.onerror = () => {
-                utils.log('External link error', 'berry-debug');
                 link.remove();
                 resolve(false);
             };
         
             document.head.appendChild(link);
         
-            setTimeout(() => {
-                utils.log('External link timeout', 'berry-debug');
-                resolve(false);
-            }, 3000);
+            setTimeout(() => resolve(false), 3000);
         });
     },
 
@@ -719,7 +570,7 @@ const styleManager = {
 
     async forceReapply() {
         if (utils.getCurrentSiteEnabled() && !this.isApplied()) {
-            utils.log('Force reapplying styles', 'berry-debug');
+            utils.log('Force reapplying styles', 'debug');
             await this.apply();
         }
     }
@@ -782,7 +633,7 @@ const observerManager = {
             }
         
             if (!styleManager.isApplied() && utils.getCurrentSiteEnabled()) {
-                utils.log('Style missing, reapplying...', 'berry-debug');
+                utils.log('Style missing, reapplying...', 'debug');
                 await styleManager.forceReapply();
             }
         };
@@ -805,7 +656,7 @@ const observerManager = {
     }
 };
 
-// Menu manager
+// Menu manager (simplified - no reload/clear cache commands)
 const menuManager = {
     setup() {
         if (typeof GM_registerMenuCommand !== 'undefined') {
@@ -817,23 +668,6 @@ const menuManager = {
 
     createMenuCommands() {
         this.updateToggleCommand();
-        
-        // Add diagnostic command
-        utils.safeCall(() => {
-            GM_registerMenuCommand('📊 Show Diagnostic Report', () => {
-                utils.showDiagnosticReport();
-                this.showToast('Check console for diagnostic report');
-            });
-        });
-        
-        // Add clear cache command
-        utils.safeCall(() => {
-            GM_registerMenuCommand('🗑️ Clear CSS Cache', () => {
-                utils.clearCache();
-                state.cssContent = null;
-                this.showToast('Cache cleared - reload page');
-            });
-        });
     },
 
     createFloatingButton() {
@@ -867,19 +701,6 @@ const menuManager = {
             e.stopPropagation();
             e.preventDefault();
             this.toggleCurrentSiteStyles();
-        });
-        
-        // Long press for diagnostic report
-        let longPressTimer;
-        button.addEventListener('touchstart', (e) => {
-            longPressTimer = setTimeout(() => {
-                utils.showDiagnosticReport();
-                this.showToast('Diagnostic report in console');
-            }, 2000);
-        });
-        
-        button.addEventListener('touchend', () => {
-            clearTimeout(longPressTimer);
         });
     
         const addButton = () => {
@@ -1009,9 +830,8 @@ const navigationManager = {
 // Main app
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v2.2`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v2.1`, 'info');
         utils.log(`Mode: ${state.isBerryBrowser ? 'Berry Browser' : 'Standard'}`, 'info');
-        utils.log(`Debug: ${CONFIG.DEBUG_MODE}, Verbose Berry: ${CONFIG.VERBOSE_BERRY_DEBUG}`, 'info');
     
         const initialDelay = state.isBerryBrowser ? 1500 : 500;
     
@@ -1024,13 +844,6 @@ const app = {
         
             const status = utils.getCurrentSiteEnabled() ? 'ENABLED ✅' : 'DISABLED ❌';
             utils.log(`Initialization complete. Status: ${status}`, 'success');
-            
-            if (state.isBerryBrowser && CONFIG.VERBOSE_BERRY_DEBUG) {
-                setTimeout(() => {
-                    utils.log('Post-init diagnostic check:', 'berry-debug');
-                    utils.showDiagnosticReport();
-                }, 2000);
-            }
         }, initialDelay);
     },
 
@@ -1039,7 +852,7 @@ const app = {
 
         for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
             try {
-                utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'berry-debug');
+                utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'debug');
             
                 if (await styleManager.apply()) {
                     utils.log('Styles successfully applied!', 'success');
@@ -1055,7 +868,6 @@ const app = {
         }
     
         utils.log('Max retries reached - styles may not be applied', 'warning');
-        utils.showDiagnosticReport();
     },
 
     setupEventListeners() {
