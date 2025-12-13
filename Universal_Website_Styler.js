@@ -25,13 +25,13 @@ const CONFIG = {
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
-        cssURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/ChatGpt_style.css',
+        cssURL: 'https://cdn.jsdelivr.net/gh/yfjuu4/ai-chat-styles@main/ChatGpt_style.css',
         styleID: 'chatgpt-enhanced-styles',
         enabledKey: 'chatgpt_styles_enabled'
     },
     'claude.ai': {
         name: 'Claude AI',
-        cssURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/Claude_AI_style.css',
+        cssURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
         styleID: 'claude-enhanced-styles',
         enabledKey: 'claude_styles_enabled'
     }
