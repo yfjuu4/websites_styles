@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Universal AI Chat Styler (Multi-Site) - Berry Compatible
+// @name         Universal AI Chat Styler (Multi-Site)
 // @namespace    http://yourdomain.example
-// @version      3.0
-// @description  Dynamically load custom CSS for ChatGPT and Claude AI with Berry Browser support
+// @version      2.0
+// @description  Dynamically load custom CSS for ChatGPT and Claude AI
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @grant        GM_addStyle
@@ -25,7 +25,7 @@ const CONFIG = {
     MAX_RETRIES: 20,
     OBSERVER_THROTTLE: 500,
     CACHE_DURATION: 12 * 60 * 60 * 1000, // 12 hours
-    CACHE_KEY_PREFIX: 'css_cache_v3_',
+    CACHE_KEY_PREFIX: 'css_cache_v2_',
     BERRY_INITIAL_DELAY: 2000,
     CHATGPT_READY_CHECK_INTERVAL: 200,
     CHATGPT_MAX_READY_CHECKS: 30
@@ -40,8 +40,7 @@ const SITES = {
         enabledKey: 'chatgpt_styles_enabled',
         needsReadyCheck: true,
         readySelector: 'main, [class*="conversation"], #__next',
-        aggressiveReapply: true,
-        useBlobForCSP: true // Force blob/inline for CSP bypass
+        aggressiveReapply: true
     },
     'claude.ai': {
         name: 'Claude AI',
@@ -50,8 +49,7 @@ const SITES = {
         enabledKey: 'claude_styles_enabled',
         needsReadyCheck: false,
         readySelector: 'body',
-        aggressiveReapply: false,
-        useBlobForCSP: false
+        aggressiveReapply: false
     }
 };
 
@@ -92,7 +90,7 @@ const state = {
     state.isBerryBrowser = !state.hasGrants && isMobile && isChromiumBased;
 
     if (state.isBerryBrowser) {
-        console.log('🍓 Berry Browser detected - using CSP-safe methods');
+        console.log('🍓 Berry Browser detected - using optimized fallback methods');
     }
 })();
 
@@ -254,7 +252,7 @@ const utils = {
     }
 };
 
-// Enhanced CSS loader with CSP bypass strategies
+// Enhanced CSS loader
 const cssLoader = {
     async fetchExternalCSS() {
         const cachedCSS = utils.getCachedCSS();
@@ -265,7 +263,6 @@ const cssLoader = {
 
         utils.log(`Fetching CSS from: ${state.site.styleURL}`, 'info');
     
-        // Try GM method first (bypasses CSP)
         if (state.hasGrants && typeof GM_xmlhttpRequest !== 'undefined') {
             try {
                 const css = await this.fetchViaGM();
@@ -276,16 +273,25 @@ const cssLoader = {
             }
         }
     
-        // For Berry Browser or when GM fails, use CORS proxies
-        utils.log('Using CORS proxy (Berry Browser mode)', 'info');
         try {
-            const css = await this.fetchViaCORSProxy();
+            const css = await this.fetchDirect();
             state.cssContent = css;
             return css;
         } catch (error) {
-            utils.log(`All fetch methods failed: ${error.message}`, 'error');
-            throw error;
+            utils.log(`Direct fetch failed: ${error.message}`, 'error');
         }
+    
+        if (CONFIG.BERRY_FALLBACK || state.isBerryBrowser) {
+            try {
+                const css = await this.fetchViaCORSProxy();
+                state.cssContent = css;
+                return css;
+            } catch (error) {
+                utils.log(`Proxy fetch failed: ${error.message}`, 'error');
+            }
+        }
+    
+        throw new Error('All fetch methods failed');
     },
 
     fetchViaGM() {
@@ -318,20 +324,48 @@ const cssLoader = {
         });
     },
 
+    async fetchDirect() {
+        utils.log('Trying direct fetch...', 'debug');
+    
+        const response = await fetch(state.site.styleURL, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/css,*/*'
+            },
+            mode: 'cors',
+            cache: 'no-cache',
+            credentials: 'omit'
+        });
+    
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+    
+        const css = await response.text();
+    
+        if (!css || css.trim().length === 0) {
+            throw new Error('Empty CSS response');
+        }
+    
+        utils.setCachedCSS(css);
+        utils.log(`Fetched ${css.length} chars directly`, 'success');
+        return css;
+    },
+
     async fetchViaCORSProxy() {
         const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(state.site.styleURL)}`,
             `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`,
+            state.site.styleURL
         ];
 
         for (let i = 0; i < proxies.length; i++) {
             const proxyUrl = proxies[i];
             try {
-                utils.log(`Trying proxy ${i + 1}/${proxies.length}: ${proxyUrl.split('?')[0]}`, 'debug');
+                utils.log(`Trying proxy ${i + 1}/${proxies.length}`, 'debug');
             
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
             
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
@@ -351,7 +385,7 @@ const cssLoader = {
             
                 if (css && css.trim().length > 0) {
                     utils.setCachedCSS(css);
-                    utils.log(`✅ Fetched ${css.length} chars via proxy ${i + 1}`, 'success');
+                    utils.log(`Fetched ${css.length} chars via proxy`, 'success');
                     return css;
                 }
             } catch (error) {
@@ -359,7 +393,6 @@ const cssLoader = {
                 if (i === proxies.length - 1) {
                     throw error;
                 }
-                await new Promise(resolve => setTimeout(resolve, 500));
                 continue;
             }
         }
@@ -368,7 +401,7 @@ const cssLoader = {
     }
 };
 
-// Style manager with CSP-aware injection
+// Style manager
 const styleManager = {
     async apply() {
         if (!utils.getCurrentSiteEnabled() || state.isLoading) {
@@ -397,17 +430,10 @@ const styleManager = {
                 throw new Error('No CSS content available');
             }
 
-            // For ChatGPT or Berry Browser, prioritize CSP-safe methods
-            const shouldUseBlobFirst = state.isBerryBrowser || state.site.useBlobForCSP;
-            
-            const methods = shouldUseBlobFirst ? [
-                { name: 'inline-style', fn: () => this.injectViaInlineStyle() },
-                { name: 'blob-link', fn: () => this.injectViaBlob() },
-                { name: 'style-element', fn: () => this.injectViaStyle() }
-            ] : [
+            const methods = [
                 { name: 'blob-link', fn: () => this.injectViaBlob() },
                 { name: 'style-element', fn: () => this.injectViaStyle() },
-                { name: 'inline-style', fn: () => this.injectViaInlineStyle() }
+                { name: 'external-link', fn: () => this.injectViaExternalLink() }
             ];
 
             for (const method of methods) {
@@ -433,69 +459,6 @@ const styleManager = {
         }
     },
 
-    // NEW: Inline style injection (bypasses CSP for 'unsafe-inline')
-    injectViaInlineStyle() {
-        if (!document.head) return false;
-    
-        const style = document.createElement('style');
-        style.id = state.site.styleID;
-        style.type = 'text/css';
-        style.setAttribute('data-method', 'inline-csp-safe');
-        
-        // Split CSS into chunks if needed to avoid potential size limits
-        const cssChunks = this.splitCSS(state.cssContent, 50000);
-        
-        if (cssChunks.length > 1) {
-            utils.log(`Splitting CSS into ${cssChunks.length} chunks`, 'debug');
-        }
-        
-        try {
-            // For single chunk, use textContent
-            if (cssChunks.length === 1) {
-                style.textContent = state.cssContent;
-                document.head.appendChild(style);
-                state.styleElement = style;
-                return true;
-            }
-            
-            // For multiple chunks, use appendChild with text nodes
-            document.head.appendChild(style);
-            cssChunks.forEach(chunk => {
-                style.appendChild(document.createTextNode(chunk));
-            });
-            state.styleElement = style;
-            return true;
-        } catch (error) {
-            style.remove();
-            utils.log(`Inline style injection failed: ${error.message}`, 'error');
-            return false;
-        }
-    },
-
-    splitCSS(css, maxChunkSize) {
-        if (css.length <= maxChunkSize) return [css];
-        
-        const chunks = [];
-        let currentPos = 0;
-        
-        while (currentPos < css.length) {
-            let chunkEnd = Math.min(currentPos + maxChunkSize, css.length);
-            
-            // Try to split at a rule boundary (look for })
-            if (chunkEnd < css.length) {
-                const nextBoundary = css.indexOf('}', chunkEnd);
-                if (nextBoundary !== -1 && nextBoundary - currentPos < maxChunkSize * 1.5) {
-                    chunkEnd = nextBoundary + 1;
-                }
-            }
-            
-            chunks.push(css.substring(currentPos, chunkEnd));
-            currentPos = chunkEnd;
-        }
-        
-        return chunks;
-    },
-
     async injectViaBlob() {
         if (!document.head) return false;
     
@@ -512,12 +475,10 @@ const styleManager = {
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
-                utils.log('Blob URL created and loaded', 'debug');
                 resolve(true);
             };
         
-            link.onerror = (e) => {
-                utils.log(`Blob load error: ${e}`, 'debug');
+            link.onerror = () => {
                 link.remove();
                 URL.revokeObjectURL(blobUrl);
                 resolve(false);
@@ -525,16 +486,14 @@ const styleManager = {
         
             document.head.appendChild(link);
         
-            // Fallback: check if loaded after timeout
             setTimeout(() => {
-                if (link.sheet && link.sheet.cssRules) {
+                if (link.sheet) {
                     state.styleElement = link;
                     resolve(true);
                 } else {
-                    utils.log('Blob timeout, sheet not accessible', 'debug');
                     resolve(false);
                 }
-            }, 2000);
+            }, 1000);
         });
     },
 
@@ -545,7 +504,7 @@ const styleManager = {
         style.id = state.site.styleID;
         style.type = 'text/css';
         style.textContent = state.cssContent;
-        style.setAttribute('data-method', 'style-tag');
+        style.setAttribute('data-method', 'inline');
     
         try {
             document.head.appendChild(style);
@@ -557,6 +516,34 @@ const styleManager = {
         }
     },
 
+    async injectViaExternalLink() {
+        if (!document.head) return false;
+    
+        const link = document.createElement('link');
+        link.id = state.site.styleID;
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = state.site.styleURL;
+        link.setAttribute('data-method', 'external');
+        link.setAttribute('crossorigin', 'anonymous');
+    
+        return new Promise((resolve) => {
+            link.onload = () => {
+                state.styleElement = link;
+                resolve(true);
+            };
+        
+            link.onerror = () => {
+                link.remove();
+                resolve(false);
+            };
+        
+            document.head.appendChild(link);
+        
+            setTimeout(() => resolve(false), 3000);
+        });
+    },
+
     remove() {
         const existingStyle = document.getElementById(state.site.styleID);
         if (existingStyle) {
@@ -566,13 +553,9 @@ const styleManager = {
             existingStyle.remove();
         }
     
-        // Clean up any orphaned elements
         const orphans = document.querySelectorAll(`[data-method]`);
         orphans.forEach(el => {
             if (el.id === state.site.styleID || el.getAttribute('data-site') === currentDomain) {
-                if (el.tagName === 'LINK' && el.href.startsWith('blob:')) {
-                    URL.revokeObjectURL(el.href);
-                }
                 el.remove();
             }
         });
@@ -673,7 +656,7 @@ const observerManager = {
     }
 };
 
-// Menu manager
+// Menu manager (simplified - no reload/clear cache commands)
 const menuManager = {
     setup() {
         if (typeof GM_registerMenuCommand !== 'undefined') {
@@ -847,9 +830,8 @@ const navigationManager = {
 // Main app
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v3.0`, 'info');
-        utils.log(`Mode: ${state.isBerryBrowser ? '🍓 Berry Browser' : '💻 Standard Browser'}`, 'info');
-        utils.log(`CSP-safe mode: ${state.site.useBlobForCSP ? 'ENABLED' : 'Standard'}`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v2.1`, 'info');
+        utils.log(`Mode: ${state.isBerryBrowser ? 'Berry Browser' : 'Standard'}`, 'info');
     
         const initialDelay = state.isBerryBrowser ? 1500 : 500;
     
@@ -862,10 +844,6 @@ const app = {
         
             const status = utils.getCurrentSiteEnabled() ? 'ENABLED ✅' : 'DISABLED ❌';
             utils.log(`Initialization complete. Status: ${status}`, 'success');
-            
-            if (state.appliedMethod) {
-                utils.log(`Applied using: ${state.appliedMethod}`, 'info');
-            }
         }, initialDelay);
     },
 
@@ -877,7 +855,7 @@ const app = {
                 utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'debug');
             
                 if (await styleManager.apply()) {
-                    utils.log('✨ Styles successfully applied!', 'success');
+                    utils.log('Styles successfully applied!', 'success');
                     return;
                 }
             } catch (error) {
@@ -885,11 +863,11 @@ const app = {
             }
 
             if (attempt < CONFIG.MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY * attempt));
+                await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
             }
         }
     
-        utils.log('⚠️ Max retries reached - please check console for errors', 'warning');
+        utils.log('Max retries reached - styles may not be applied', 'warning');
     },
 
     setupEventListeners() {
