@@ -13,6 +13,7 @@
 // @match        https://www.facebook.com/*
 // @match        https://facebook.com/*
 // @match        https://*.facebook.com/*
+// @match        https://m.facebook.com/*
 // @match        https://x.com/*
 // @match        https://*.x.com/*
 // @match        https://twitter.com/*
