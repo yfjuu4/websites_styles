@@ -6,10 +6,8 @@
 // @match https://chatgpt.com/*
 // @run-at document-end
 // ==/UserScript==
-
 (function() {
 'use strict';
-
 // Configuration
 const CONFIG = {
     STYLE_ID: 'chatgpt-enhanced-styles',
@@ -18,9 +16,26 @@ const CONFIG = {
     MAX_RETRIES: 50,
     OBSERVER_THROTTLE: 250
 };
-
 const USER_CSS = String.raw`
-/*========================================================*/
+/* Target the entire scrollbar and set its width */
+::-webkit-scrollbar {
+width: 9px;
+}
+/* Style the scrollbar thumb (the draggable part) */
+::-webkit-scrollbar-thumb {
+background-color: #00c508; /* Grey color */
+border-radius: 6px; /* Rounded corners */
+}
+/* Style the scrollbar track (the background) */
+::-webkit-scrollbar-track {
+background-color: black; /* Light grey */
+border-left: 2px #f300ff solid;
+}
+/* Style the thumb on hover */
+::-webkit-scrollbar-thumb:hover {
+background-color: #555; /* Darker grey on hover */
+}
+    /*========================================================*/
 .md\:px-Mathjax,
 .pt-5,
 .font-bold,
@@ -51,7 +66,8 @@ button[data-testid="share-chat-button"],
 .pt-\(--sidebar-section-first-margin-top\):nth-child(3),
 .sm\:items-center
 ,.mb-\[var\(--sidebar-collapsed-section-margin-bottom\)\]
-,#page-header {
+,.lg\:hidden
+{
     display: none !important;
 }
 /*-----------------------------------------*/
@@ -516,9 +532,6 @@ li > .cursor-pointer .text-sm {
 .markdown h1 {
     color: #d8c8c8;
 }
-.\@\[64rem\]\:\[--thread-content-max-width\:48rem\] {
-    border: 1px #a00 solid;
-}
 .\@\[70rem\]\:\[--thread-content-margin\:--spacing\(12\)\] {
     --thread-content-margin: calc(var(--spacing)* 0);
 }
@@ -667,7 +680,7 @@ li > .cursor-pointer .text-sm {
     margin: 0;
 }
 #prompt-textarea > p {
-    Color: #cd0101;
+    Color: #dacccc;
     font-size: 20px;
 }
 #prompt-textarea {
@@ -687,6 +700,7 @@ li > .cursor-pointer .text-sm {
     border: 1px #a300a7 solid;
     place-self: center;
     padding:0;
+    max-width: -webkit-fill-available;
 }
 /*-----------------------------------------*/
 .pt-3 {
@@ -694,9 +708,6 @@ li > .cursor-pointer .text-sm {
 }
 .thread-xl\:pt-header-height {
     padding-top: 0;
-}
-.thread-lg\:\[--thread-content-max-width\:48rem\] {
-    border: 1px #e10000 solid;
 }
 .md\:gap-8 {
     gap: 0;
@@ -750,16 +761,12 @@ p > em {
 .\@w-xl\/main\:pt-header-height {
     padding-top: 10px;
 }
-.\@w-lg\/main\:\[--thread-content-max-width\:48rem\] {
-    border: 1px #e10000 solid;
-}
 .composer-submit-btn {
     background-color: #d8cbcb;
     border: 2px #00e125 solid;
 }
 /*========================================================*/
 `;
-
 // State management
 const state = {
     enabled: true, // Always enabled since we can't save preferences
@@ -769,14 +776,12 @@ const state = {
     lastThrottle: 0,
     currentURL: location.href
 };
-
 // Utility functions
 const utils = {
     log(message) {
         if (!CONFIG.DEBUG_MODE) return;
         console.log(`ChatGPT Styler: ${message}`);
     },
-    
     throttle(func, delay) {
         let timeoutId;
         let lastExecTime = 0;
@@ -795,7 +800,6 @@ const utils = {
             }
         };
     },
-    
     safeCall(fn, fallback = null) {
         try {
             return fn();
@@ -805,21 +809,17 @@ const utils = {
         }
     }
 };
-
 // Style management
 const styleManager = {
     apply() {
         if (!state.enabled) return false;
         this.remove();
-        
         // Direct style injection (the only method supported in Berry Browser)
         return this.injectStyleElement();
     },
-    
     injectStyleElement() {
         return utils.safeCall(() => {
             if (!document.head) return false;
-            
             state.styleElement = document.createElement('style');
             state.styleElement.id = CONFIG.STYLE_ID;
             state.styleElement.type = 'text/css';
@@ -827,12 +827,10 @@ const styleManager = {
             // Make it hard to remove
             state.styleElement.setAttribute('data-protected', 'true');
             document.head.appendChild(state.styleElement);
-            
             utils.log('Styles applied via style element');
             return true;
         }, false);
     },
-    
     remove() {
         // Remove existing style elements
         const existingStyle = document.getElementById(CONFIG.STYLE_ID);
@@ -842,11 +840,9 @@ const styleManager = {
         state.styleElement = null;
         utils.log('Styles removed');
     },
-    
     isApplied() {
         return !!document.getElementById(CONFIG.STYLE_ID);
     },
-    
     forceReapply() {
         if (state.enabled && !this.isApplied()) {
             utils.log('Force reapplying styles');
@@ -854,7 +850,6 @@ const styleManager = {
         }
     }
 };
-
 // Observer management
 const observerManager = {
     setup() {
@@ -863,12 +858,10 @@ const observerManager = {
         this.createDOMObserver();
         utils.log('Observer started');
     },
-    
     createDOMObserver() {
         const throttledReapply = utils.throttle(() => {
             styleManager.forceReapply();
         }, CONFIG.OBSERVER_THROTTLE);
-        
         state.observer = new MutationObserver(mutations => {
             let shouldReapply = false;
             for (const mutation of mutations) {
@@ -890,13 +883,11 @@ const observerManager = {
                 throttledReapply();
             }
         });
-        
         state.observer.observe(document, {
             childList: true,
             subtree: true
         });
     },
-    
     cleanup() {
         if (state.observer) {
             state.observer.disconnect();
@@ -905,7 +896,6 @@ const observerManager = {
         utils.log('Observer cleaned up');
     }
 };
-
 // SPA Navigation handling
 const navigationManager = {
     init() {
@@ -913,22 +903,18 @@ const navigationManager = {
         window.addEventListener('popstate', this.handleURLChange);
         window.addEventListener('hashchange', this.handleURLChange);
     },
-    
     overrideHistoryMethods() {
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
-        
         history.pushState = function() {
             originalPushState.apply(this, arguments);
             navigationManager.handleURLChange();
         };
-        
         history.replaceState = function() {
             originalReplaceState.apply(this, arguments);
             navigationManager.handleURLChange();
         };
     },
-    
     handleURLChange: utils.throttle(() => {
         if (location.href !== state.currentURL) {
             state.currentURL = location.href;
@@ -939,34 +925,26 @@ const navigationManager = {
         }
     }, 300)
 };
-
 // Main initialization
 const app = {
     init() {
         utils.log('Initializing ChatGPT Styler for Berry Browser');
-        
         // Apply styles with retry mechanism
         this.applyWithRetry();
-        
         // Setup observer
         observerManager.setup();
-        
         // Setup event listeners and SPA handling
         this.setupEventListeners();
         navigationManager.init();
-        
         utils.log('Initialization complete. Styles applied.');
     },
-    
     applyWithRetry() {
         if (!state.enabled) return;
-        
         const attempt = () => {
             if (styleManager.apply()) {
                 state.retryCount = 0;
                 return;
             }
-            
             state.retryCount++;
             if (state.retryCount < CONFIG.MAX_RETRIES) {
                 setTimeout(attempt, CONFIG.RETRY_DELAY);
@@ -976,7 +954,6 @@ const app = {
         };
         attempt();
     },
-    
     setupEventListeners() {
         // Handle visibility changes
         document.addEventListener('visibilitychange', () => {
@@ -984,21 +961,18 @@ const app = {
                 setTimeout(() => styleManager.forceReapply(), 100);
             }
         });
-        
         // Handle focus events
         window.addEventListener('focus', () => {
             if (state.enabled) {
                 setTimeout(() => styleManager.forceReapply(), 100);
             }
         });
-        
         // Cleanup on unload
         window.addEventListener('beforeunload', () => {
             observerManager.cleanup();
         });
     }
 };
-
 // Start the application
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => app.init());
