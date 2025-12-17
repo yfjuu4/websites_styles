@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Universal AI Chat Styler (Berry Browser Compatible)
 // @namespace    http://yourdomain.example
-// @version      4
-// @description  Load custom CSS for ChatGPT, Claude AI, and Reverso Context via jsDelivr - Berry Browser Optimized
+// @version      5.0
+// @description  Load custom CSS for ChatGPT, Claude AI, and Reverso Context with auto URL conversion - Berry Browser Optimized
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @match        https://context.reverso.net/*
@@ -26,14 +26,142 @@ const CONFIG = {
     CHATGPT_MAX_READY_CHECKS: 30
 };
 
-// 🎨 Site configuration with jsDelivr URLs
+// 🛠️ URL Conversion Utilities
+const urlConverter = {
+    /**
+     * Convert GitHub raw URL to jsDelivr CDN URL
+     * @param {string} githubRawURL - GitHub raw URL
+     * @returns {string|null} jsDelivr URL or null if invalid
+     */
+    githubRawToJsDelivr(githubRawURL) {
+        try {
+            // Validate input
+            if (!githubRawURL || typeof githubRawURL !== 'string') {
+                console.log('Invalid GitHub URL: Not a string');
+                return null;
+            }
+            
+            // Trim and check if empty
+            const trimmedURL = githubRawURL.trim();
+            if (!trimmedURL) {
+                console.log('Invalid GitHub URL: Empty string');
+                return null;
+            }
+            
+            // Check if already a jsDelivr URL
+            if (this.isJsDelivrURL(trimmedURL)) {
+                console.log('URL is already jsDelivr format');
+                return trimmedURL;
+            }
+            
+            // Main conversion logic
+            if (this.isGitHubRawURL(trimmedURL)) {
+                return this.convertStandardFormat(trimmedURL);
+            }
+            
+            // Try alternative GitHub URL patterns
+            if (this.isGitHubBlobURL(trimmedURL)) {
+                return this.convertBlobToJsDelivr(trimmedURL);
+            }
+            
+            console.log(`Unrecognized GitHub URL format: ${trimmedURL}`);
+            return null;
+            
+        } catch (error) {
+            console.log(`URL conversion failed: ${error.message}`);
+            return null;
+        }
+    },
+    
+    /**
+     * Check if URL is already in jsDelivr format
+     */
+    isJsDelivrURL(url) {
+        return url.includes('cdn.jsdelivr.net/gh/');
+    },
+    
+    /**
+     * Check if URL is GitHub raw format
+     */
+    isGitHubRawURL(url) {
+        return url.includes('raw.githubusercontent.com/');
+    },
+    
+    /**
+     * Check if URL is GitHub blob format (from repository page)
+     */
+    isGitHubBlobURL(url) {
+        return url.includes('github.com/') && url.includes('/blob/');
+    },
+    
+    /**
+     * Convert standard GitHub raw URL to jsDelivr
+     */
+    convertStandardFormat(githubRawURL) {
+        // Pattern: https://raw.githubusercontent.com/{user}/{repo}/{ref}/{path}
+        const pattern = /^https?:\/\/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)$/;
+        const match = githubRawURL.match(pattern);
+        
+        if (!match) {
+            throw new Error('Invalid GitHub raw URL pattern');
+        }
+        
+        const [, user, repo, ref, path] = match;
+        
+        // Preserve URL encoding in the path
+        const encodedPath = this.preserveEncoding(path);
+        
+        // Construct jsDelivr URL
+        return `https://cdn.jsdelivr.net/gh/${user}/${repo}@${ref}/${encodedPath}`;
+    },
+    
+    /**
+     * Convert GitHub blob URL to jsDelivr
+     * Example: https://github.com/user/repo/blob/branch/path/file.css
+     */
+    convertBlobToJsDelivr(githubBlobURL) {
+        // Remove github.com and /blob/ parts
+        const withoutBlob = githubBlobURL
+            .replace('https://github.com/', '')
+            .replace('/blob/', '/');
+        
+        // Split into parts
+        const parts = withoutBlob.split('/');
+        if (parts.length < 4) {
+            throw new Error('Invalid GitHub blob URL');
+        }
+        
+        const user = parts[0];
+        const repo = parts[1];
+        const ref = parts[2];
+        const path = parts.slice(3).join('/');
+        const encodedPath = this.preserveEncoding(path);
+        
+        return `https://cdn.jsdelivr.net/gh/${user}/${repo}@${ref}/${encodedPath}`;
+    },
+    
+    /**
+     * Preserve URL encoding in paths
+     */
+    preserveEncoding(path) {
+        // Decode then encode to ensure proper encoding
+        try {
+            const decoded = decodeURIComponent(path);
+            // Re-encode, but preserve slashes
+            return encodeURI(decoded).replace(/%2F/g, '/');
+        } catch (e) {
+            // If decoding fails, use original (already encoded)
+            return path;
+        }
+    }
+};
+
+// 🎨 Site configuration - Use GitHub URLs only (jsDelivr auto-converted)
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
-        // Primary: jsDelivr CDN URL
-        styleURL: 'https://cdn.jsdelivr.net/gh/yfjuu4/ai-chat-styles@main/ChatGpt_style.css',
-        // Fallback: GitHub raw URL
-        fallbackURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
+        // Only provide GitHub URL - jsDelivr is auto-generated
+        githubURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
         
         styleID: 'chatgpt-enhanced-styles',
         needsReadyCheck: true,
@@ -42,10 +170,8 @@ const SITES = {
     },
     'claude.ai': {
         name: 'Claude AI',
-        // Primary: jsDelivr CDN URL
-        styleURL: 'https://cdn.jsdelivr.net/gh/yfjuu4/ai-chat-styles@main/Claude_AI_style.css',
-        // Fallback: GitHub raw URL
-        fallbackURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/Claude_AI_style.css',
+        // Only provide GitHub URL
+        githubURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/Claude_AI_style.css',
         
         styleID: 'claude-enhanced-styles',
         needsReadyCheck: false,
@@ -54,10 +180,8 @@ const SITES = {
     },
     'context.reverso.net': {
         name: 'Reverso Context',
-        // Primary: jsDelivr CDN URL
-        styleURL: 'https://cdn.jsdelivr.net/gh/yfjuu4/ai-chat-styles@main/reverso%20context%20style.css',
-        // Fallback: GitHub raw URL
-        fallbackURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/reverso%20context%20style.css',
+        // Only provide GitHub URL
+        githubURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/reverso%20context%20style.css',
         
         styleID: 'reverso-context-enhanced-styles',
         needsReadyCheck: false,
@@ -75,7 +199,7 @@ if (!currentSite) {
     return;
 }
 
-// 📊 State management
+// 📊 Enhanced State management with auto-conversion
 const state = {
     site: currentSite,
     styleElement: null,
@@ -89,7 +213,29 @@ const state = {
     appliedMethod: null,
     lastApplyTime: 0,
     fetchAttempts: 0,
-    enabled: true
+    enabled: true,
+    
+    // 🆕 Auto-generated URLs
+    get styleURL() {
+        // Auto-convert GitHub URL to jsDelivr
+        if (!this._styleURL) {
+            this._styleURL = urlConverter.githubRawToJsDelivr(this.site.githubURL);
+            if (!this._styleURL) {
+                console.log('Auto-conversion failed, using GitHub URL as primary');
+                this._styleURL = this.site.githubURL;
+            }
+        }
+        return this._styleURL;
+    },
+    
+    get fallbackURL() {
+        // Always use original GitHub URL as fallback
+        return this.site.githubURL;
+    },
+    
+    // 🆕 Cache for URLs
+    _styleURL: null,
+    _fallbackURL: null
 };
 
 // 🔍 Browser detection
@@ -121,7 +267,7 @@ const utils = {
         }[level] || 'ℹ️';
        
         const prefix = state.isBerryBrowser ? `${emoji}🍓` : emoji;
-        console.log(`${prefix} [${currentSite.name}] ${message}`);
+        console.log(`${prefix} [${state.site.name}] ${message}`);
     },
    
     throttle(func, delay) {
@@ -176,7 +322,7 @@ const utils = {
         const now = Date.now();
    
         // Check if cache is for current URL
-        if (url !== state.site.styleURL) {
+        if (url !== state.styleURL) {
             this.log('CSS URL changed, invalidating cache', 'debug');
             return null;
         }
@@ -196,7 +342,7 @@ const utils = {
         const cacheData = {
             css: css,
             timestamp: Date.now(),
-            url: state.site.styleURL
+            url: state.styleURL
         };
         return this.setValue(cacheKey, cacheData);
     },
@@ -248,7 +394,7 @@ const utils = {
     }
 };
 
-// 📥 CSS loader optimized for Berry Browser
+// 📥 Enhanced CSS loader with automatic URL handling
 const cssLoader = {
     async fetchExternalCSS() {
         state.fetchAttempts++;
@@ -261,7 +407,8 @@ const cssLoader = {
         }
 
         utils.log(`Fetch attempt #${state.fetchAttempts}`, 'info');
-        utils.log(`Primary URL: ${state.site.styleURL}`, 'debug');
+        utils.log(`Primary (jsDelivr): ${state.styleURL}`, 'debug');
+        utils.log(`Fallback (GitHub): ${state.fallbackURL}`, 'debug');
        
         // 2. Try GM_xmlhttpRequest if available (Tampermonkey)
         if (state.hasGrants) {
@@ -317,7 +464,7 @@ const cssLoader = {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: state.site.styleURL,
+                url: state.styleURL,
                 timeout: 15000,
                 headers: {
                     'Accept': 'text/css,*/*',
@@ -346,7 +493,7 @@ const cssLoader = {
     async fetchDirect() {
         utils.log('Trying direct fetch...', 'debug');
        
-        const response = await fetch(state.site.styleURL, {
+        const response = await fetch(state.styleURL, {
             method: 'GET',
             headers: { 'Accept': 'text/css,*/*' },
             mode: 'cors',
@@ -373,11 +520,11 @@ const cssLoader = {
        
         const strategies = [
             // Try jsDelivr with different modes
-            { url: state.site.styleURL, mode: 'no-cors', desc: 'jsDelivr no-cors' },
-            { url: state.site.styleURL, mode: 'cors', desc: 'jsDelivr cors' },
+            { url: state.styleURL, mode: 'no-cors', desc: 'jsDelivr no-cors' },
+            { url: state.styleURL, mode: 'cors', desc: 'jsDelivr cors' },
             // Try GitHub fallback
-            { url: state.site.fallbackURL, mode: 'no-cors', desc: 'GitHub no-cors' },
-            { url: state.site.fallbackURL, mode: 'cors', desc: 'GitHub cors' }
+            { url: state.fallbackURL, mode: 'no-cors', desc: 'GitHub no-cors' },
+            { url: state.fallbackURL, mode: 'cors', desc: 'GitHub cors' }
         ];
        
         for (const strategy of strategies) {
@@ -411,9 +558,9 @@ const cssLoader = {
     // Method 4: CORS proxy
     async fetchViaCORSProxy() {
         const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(state.site.styleURL)}`,
-            `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(state.styleURL)}`,
+            `https://corsproxy.io/?${encodeURIComponent(state.styleURL)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.styleURL)}`
         ];
        
         for (let i = 0; i < proxies.length; i++) {
@@ -762,7 +909,8 @@ const uiManager = {
         const info = `
 🍓 Berry Browser Debug Info:
 Site: ${state.site.name}
-URL: ${state.site.styleURL}
+GitHub URL: ${state.site.githubURL}
+jsDelivr URL: ${state.styleURL}
 Enabled: ${state.enabled}
 Fetch Attempts: ${state.fetchAttempts}
 CSS Content: ${state.cssContent ? state.cssContent.length + ' chars' : 'None'}
@@ -825,11 +973,47 @@ const navigationManager = {
     }, 500)
 };
 
+// 🆕 Helper for adding new sites
+function addNewSite(domain, config) {
+    // Ensure required fields
+    if (!config.githubURL) {
+        console.log(`Cannot add site ${domain}: Missing githubURL`);
+        return false;
+    }
+    
+    // Auto-set styleID if not provided
+    if (!config.styleID) {
+        config.styleID = `${domain.replace(/\./g, '-')}-enhanced-styles`;
+    }
+    
+    // Set defaults
+    config.needsReadyCheck = config.needsReadyCheck || false;
+    config.readySelector = config.readySelector || 'body';
+    config.aggressiveReapply = config.aggressiveReapply || false;
+    
+    // Add to SITES
+    SITES[domain] = {
+        name: config.name || domain,
+        githubURL: config.githubURL,
+        styleID: config.styleID,
+        needsReadyCheck: config.needsReadyCheck,
+        readySelector: config.readySelector,
+        aggressiveReapply: config.aggressiveReapply
+    };
+    
+    console.log(`Added new site: ${domain}`);
+    return true;
+}
+
 // 🚀 Main application
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v4.0`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v5.0`, 'info');
         utils.log(`Mode: ${state.isBerryBrowser ? '🍓 Berry Browser' : 'Standard'}`, 'info');
+        
+        // 🆕 Show URL conversion info
+        utils.log(`GitHub URL: ${state.site.githubURL}`, 'debug');
+        utils.log(`Auto-converted to jsDelivr: ${state.styleURL}`, 'debug');
    
         // Add CSS animations
         this.addPulseAnimation();
