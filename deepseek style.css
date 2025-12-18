@@ -2,24 +2,20 @@
 ::-webkit-scrollbar {
   width: 9px;
 }
-
 /* Style the scrollbar thumb (the draggable part) */
 ::-webkit-scrollbar-thumb {
   background-color: #00c508; /* Grey color */
   border-radius: 6px; /* Rounded corners */
 }
-
 /* Style the scrollbar track (the background) */
 ::-webkit-scrollbar-track {
   background-color: black; /* Light grey */
   border-left: 2px #f300ff solid;
 }
-
 /* Style the thumb on hover */
 ::-webkit-scrollbar-thumb:hover {
   background-color: #555; /* Darker grey on hover */
 }
-
 .ds-markdown>:first-child
 {
     Color:#a49502;
@@ -41,18 +37,3 @@ strong {
     Color: #000000;
 }
 
-[data-ds-dark-theme] ._48edb25 .e1675d8b {
-    color: #a6a6a6;
-    Color:#a49502;
-    font-size: 20px;
-}
-
-[data-ds-dark-theme] .fbb737a4 {
-    color: #01b0bd;
-    background-color: #414158;
-    font-size: 20px !important;
-}
-
-html {
-    background-color: black;
-}
