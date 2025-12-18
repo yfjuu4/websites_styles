@@ -1,0 +1,42 @@
+[data-ds-dark-theme] ._0fcaa63
+,[data-ds-dark-theme] ._2be88ba
+{
+    display: none !important;
+}
+
+.ds-markdown>:first-child
+{
+    Color:#a49502;
+    font-size: 23px;
+}
+
+strong {
+    Color:#bc0000;
+    font-size: 23px;
+}
+
+.ds-markdown-paragraph:not(strong){
+    Color:#a49502;
+    font-size: 23px !important;
+}
+
+.ds-markdown code {
+    background-color: #aa0000;
+    Color: #000000;
+}
+
+[data-ds-dark-theme] ._48edb25 .e1675d8b {
+    color: #a6a6a6;
+    Color:#a49502;
+    font-size: 20px;
+}
+
+[data-ds-dark-theme] .fbb737a4 {
+    color: #01b0bd;
+    background-color: #414158;
+    font-size: 23px !important;
+}
+
+html {
+    background-color: black;
+}
