@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Site Styler with Per-Site Control
 // @namespace    http://yourdomain.example
-// @version      5.3
+// @version      5
 // @description  Load custom CSS from GitHub with per-site enable/disable control and hideable button
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
