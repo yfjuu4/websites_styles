@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Universal Site Styler with Per-Site Control
 // @namespace    http://yourdomain.example
-// @version      5.1
-// @description  Load custom CSS from GitHub with per-site enable/disable control
+// @version      5.2
+// @description  Load custom CSS from GitHub with per-site enable/disable control and hideable button
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @match        https://context.reverso.net/*
@@ -18,27 +18,31 @@ const CONFIG = {
     DEBUG_MODE: true,
     RETRY_DELAY: 500,
     MAX_RETRIES: 15,
-    OBSERVER_THROTTLE: 1000,
+    OBSERVER_THROTTLE: 500,
     CACHE_DURATION: 6 * 60 * 60 * 1000,
     CACHE_KEY_PREFIX: 'css_cache_',
     BERRY_INITIAL_DELAY: 4000,
     CHATGPT_READY_CHECK_INTERVAL: 200,
     CHATGPT_MAX_READY_CHECKS: 30,
     
-    // 🆕 Per-site configuration defaults
-    SITE_SETTINGS_KEY: 'site_styler_settings_v2'
+    // Per-site configuration storage
+    SITE_SETTINGS_KEY: 'site_styler_settings_v2',
+    
+    // 🆕 Button visibility control
+    BUTTON_VISIBLE_BY_DEFAULT: false,
+    BUTTON_VISIBILITY_KEY: 'site_styler_button_visible'
 };
 
-// 🎨 Site configuration with ENABLE/DISABLE control
+// 🎨 Site configuration - GitHub raw URLs only
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
         styleID: 'chatgpt-enhanced-styles',
-        needsReadyCheck: false,
+        needsReadyCheck: true,
         readySelector: 'main, [class*="conversation"], #__next',
-        aggressiveReapply: false,
-        enabledByDefault: true  // 🆕 Default state for this site
+        aggressiveReapply: true,
+        enabledByDefault: true
     },
     'claude.ai': {
         name: 'Claude AI',
@@ -47,7 +51,7 @@ const SITES = {
         needsReadyCheck: false,
         readySelector: 'body',
         aggressiveReapply: false,
-        enabledByDefault: true  // 🆕 Default state for this site
+        enabledByDefault: true
     },
     'context.reverso.net': {
         name: 'Reverso Context',
@@ -56,7 +60,7 @@ const SITES = {
         needsReadyCheck: false,
         readySelector: 'body',
         aggressiveReapply: false,
-        enabledByDefault: true  // 🆕 Default state for this site
+        enabledByDefault: true
     }
 };
 
@@ -83,18 +87,19 @@ const state = {
     appliedMethod: null,
     lastApplyTime: 0,
     fetchAttempts: 0,
-    enabled: true  // Will be overridden by per-site settings
+    enabled: true
 };
 
 // 🔍 Browser detection
 (function detectCapabilities() {
     state.hasGrants = typeof GM_xmlhttpRequest !== 'undefined';
    
+    // Simple Berry Browser detection
     const userAgent = navigator.userAgent.toLowerCase();
     state.isBerryBrowser = !state.hasGrants && /android/.test(userAgent);
    
     if (state.isBerryBrowser) {
-        console.log('🍓 Berry Browser detected');
+        console.log('🍓 Berry Browser detected - using GitHub direct fetch');
         CONFIG.DEBUG_MODE = true;
     }
 })();
@@ -152,7 +157,7 @@ const utils = {
         }
         
         // Otherwise use the default from SITES config
-        const defaultState = currentSite.enabledByDefault !== false; // Default to true if not specified
+        const defaultState = currentSite.enabledByDefault !== false;
         this.log(`Using default setting: ${defaultState ? 'ENABLED' : 'DISABLED'}`, 'config');
         return defaultState;
     },
@@ -165,7 +170,7 @@ const utils = {
         this.log(`Saved site setting: ${isEnabled ? 'ENABLED' : 'DISABLED'}`, 'config');
     },
    
-    // 🆕 Get all site settings (for debug panel)
+    // Get all site settings (for debug panel)
     getAllSiteSettings() {
         const settings = this.getSiteSettings();
         const result = {};
@@ -181,7 +186,7 @@ const utils = {
         return result;
     },
    
-    // 🆕 Reset all site settings to defaults
+    // Reset all site settings to defaults
     resetAllSiteSettings() {
         const defaultSettings = {};
         Object.keys(SITES).forEach(domain => {
@@ -190,6 +195,32 @@ const utils = {
         this.saveSiteSettings(defaultSettings);
         this.log('All site settings reset to defaults', 'success');
         return defaultSettings;
+    },
+   
+    // 🆕 BUTTON VISIBILITY FUNCTIONS
+    getButtonVisibility() {
+        try {
+            const stored = localStorage.getItem(CONFIG.BUTTON_VISIBILITY_KEY);
+            return stored !== null ? JSON.parse(stored) : CONFIG.BUTTON_VISIBLE_BY_DEFAULT;
+        } catch (e) {
+            return CONFIG.BUTTON_VISIBLE_BY_DEFAULT;
+        }
+    },
+    
+    saveButtonVisibility(isVisible) {
+        try {
+            localStorage.setItem(CONFIG.BUTTON_VISIBILITY_KEY, JSON.stringify(isVisible));
+            return true;
+        } catch (e) {
+            return false;
+        }
+    },
+    
+    toggleButtonVisibility() {
+        const current = this.getButtonVisibility();
+        const newState = !current;
+        this.saveButtonVisibility(newState);
+        return newState;
     },
    
     throttle(func, delay) {
@@ -711,7 +742,7 @@ const observerManager = {
     }
 };
 
-// 📱 Enhanced UI Manager with Per-Site Settings Panel
+// 📱 Enhanced UI Manager with Hideable Button
 const uiManager = {
     setup() {
         this.createFloatingButton();
@@ -721,6 +752,15 @@ const uiManager = {
     createFloatingButton() {
         const button = document.createElement('div');
         button.id = 'site-styler-btn';
+        
+        // 🆕 Check if button should be visible
+        const isButtonVisible = utils.getButtonVisibility();
+        
+        // 🆕 Add visibility class for CSS targeting
+        if (!isButtonVisible) {
+            button.classList.add('hidden-button');
+        }
+        
         button.style.cssText = `
             position: fixed;
             bottom: 80px;
@@ -738,12 +778,22 @@ const uiManager = {
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         `;
-   
+        
+        // 🆕 Apply hidden state if needed
+        if (!isButtonVisible) {
+            button.style.transform = 'translateX(100px) scale(0.8)';
+            button.style.opacity = '0';
+            button.style.pointerEvents = 'none';
+        }
+        
         this.updateButtonState(button);
+        
+        // 🆕 Add button animation styles
+        this.addButtonAnimations();
    
         // Click: Toggle current site styles
         button.addEventListener('click', (e) => {
@@ -774,6 +824,27 @@ const uiManager = {
         addButton();
     },
    
+    addButtonAnimations() {
+        if (!document.head || document.getElementById('button-animations')) return;
+       
+        const style = document.createElement('style');
+        style.id = 'button-animations';
+        style.textContent = `
+            #site-styler-btn.hidden-button {
+                transform: translateX(100px) scale(0.8) !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            
+            #site-styler-btn:not(.hidden-button) {
+                transform: translateX(0) scale(1) !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
+        `;
+        document.head.appendChild(style);
+    },
+   
     updateButtonState(button) {
         if (!button) button = document.getElementById('site-styler-btn');
         if (!button) return;
@@ -782,6 +853,7 @@ const uiManager = {
         button.style.opacity = state.enabled ? '1' : '0.6';
         button.title = `${state.site.name}: ${state.enabled ? 'ON' : 'OFF'}\nLong press for settings`;
        
+        // Add pulse animation when loading
         if (state.isLoading) {
             button.style.animation = 'pulse 1.5s infinite';
         } else {
@@ -803,6 +875,30 @@ const uiManager = {
        
         this.updateButtonState();
         this.showToast(`${state.site.name}: ${state.enabled ? 'ON' : 'OFF'}`);
+    },
+   
+    // 🆕 Toggle button visibility
+    toggleButtonVisibility() {
+        const button = document.getElementById('site-styler-btn');
+        const currentVisibility = utils.getButtonVisibility();
+        const newVisibility = !currentVisibility;
+        
+        // Save the new visibility setting
+        utils.saveButtonVisibility(newVisibility);
+        
+        // Update button class for CSS targeting
+        if (button) {
+            if (newVisibility) {
+                button.classList.remove('hidden-button');
+                button.style.pointerEvents = 'auto';
+            } else {
+                button.classList.add('hidden-button');
+                button.style.pointerEvents = 'none';
+            }
+        }
+        
+        this.showToast(`Button ${newVisibility ? 'shown' : 'hidden'}`);
+        return newVisibility;
     },
    
     createSettingsPanel() {
@@ -862,13 +958,85 @@ const uiManager = {
         `;
         panel.appendChild(currentSiteInfo);
        
+        // 🆕 BUTTON VISIBILITY SECTION
+        const buttonSection = document.createElement('div');
+        buttonSection.style.cssText = `
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            margin: 10px 0;
+        `;
+        
+        const buttonTitle = document.createElement('div');
+        buttonTitle.textContent = 'Button Settings';
+        buttonTitle.style.cssText = `
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #90CAF9;
+        `;
+        buttonSection.appendChild(buttonTitle);
+        
+        // Current button state
+        const buttonState = document.createElement('div');
+        buttonState.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+        `;
+        const isButtonVisible = utils.getButtonVisibility();
+        buttonState.innerHTML = `
+            <span>Floating button:</span>
+            <span style="color: ${isButtonVisible ? '#4CAF50' : '#f44336'}">
+                ${isButtonVisible ? 'VISIBLE' : 'HIDDEN'}
+            </span>
+        `;
+        buttonSection.appendChild(buttonState);
+        
+        // Toggle button visibility button
+        const toggleButtonBtn = document.createElement('button');
+        toggleButtonBtn.id = 'toggle-button-visibility';
+        toggleButtonBtn.textContent = isButtonVisible ? 'Hide Button' : 'Show Button';
+        toggleButtonBtn.style.cssText = `
+            width: 100%;
+            background: ${isButtonVisible ? '#f44336' : '#4CAF50'};
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.3s;
+        `;
+        
+        toggleButtonBtn.addEventListener('click', () => {
+            const newVisibility = this.toggleButtonVisibility();
+            
+            // Update button text and color
+            toggleButtonBtn.textContent = newVisibility ? 'Hide Button' : 'Show Button';
+            toggleButtonBtn.style.background = newVisibility ? '#f44336' : '#4CAF50';
+            
+            // Update status text
+            buttonState.innerHTML = `
+                <span>Floating button:</span>
+                <span style="color: ${newVisibility ? '#4CAF50' : '#f44336'}">
+                    ${newVisibility ? 'VISIBLE' : 'HIDDEN'}
+                </span>
+            `;
+        });
+        
+        buttonSection.appendChild(toggleButtonBtn);
+        panel.appendChild(buttonSection);
+       
         // All sites settings
         const allSitesTitle = document.createElement('div');
         allSitesTitle.textContent = 'ALL SITES';
         allSitesTitle.style.cssText = `
             font-size: 12px;
             opacity: 0.8;
-            margin-top: 15px;
+            margin-top: 5px;
             margin-bottom: 10px;
         `;
         panel.appendChild(allSitesTitle);
@@ -1052,6 +1220,7 @@ const uiManager = {
 🍓 Site Styler Debug Info:
 Current Site: ${state.site.name} (${state.enabled ? 'ENABLED' : 'DISABLED'})
 GitHub URL: ${state.site.styleURL}
+Button Visible: ${utils.getButtonVisibility() ? 'YES' : 'NO'}
 
 ALL SITE SETTINGS:
 ${Object.keys(allSettings).map(domain => `  ${domain}: ${allSettings[domain] ? '✅' : '❌'}`).join('\n')}
@@ -1118,10 +1287,11 @@ const navigationManager = {
 // 🚀 Main application
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v5.1`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v5.2`, 'info');
         utils.log(`Mode: ${state.isBerryBrowser ? '🍓 Berry Browser' : 'Standard'}`, 'info');
         utils.log(`Source: GitHub Raw URLs`, 'github');
         utils.log(`Site setting: ${state.enabled ? 'ENABLED' : 'DISABLED'}`, 'config');
+        utils.log(`Button: ${utils.getButtonVisibility() ? 'VISIBLE' : 'HIDDEN'}`, 'config');
    
         // Add CSS animations
         this.addPulseAnimation();
