@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Universal Site Styler with Per-Site Control
 // @namespace    http://yourdomain.example
-// @version      5.2
+// @version      5.3
 // @description  Load custom CSS from GitHub with per-site enable/disable control and hideable button
 // @match        https://chatgpt.com/*
 // @match        https://claude.ai/*
 // @match        https://context.reverso.net/*
+// @match        https://chat.deepseek.com/*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // ==/UserScript==
@@ -15,19 +16,19 @@
 
 // 🎯 Configuration
 const CONFIG = {
-    DEBUG_MODE: true,
+    DEBUG_MODE: false,
     RETRY_DELAY: 500,
     MAX_RETRIES: 15,
-    OBSERVER_THROTTLE: 500,
+    OBSERVER_THROTTLE: 1000,
     CACHE_DURATION: 6 * 60 * 60 * 1000,
     CACHE_KEY_PREFIX: 'css_cache_',
     BERRY_INITIAL_DELAY: 4000,
     CHATGPT_READY_CHECK_INTERVAL: 200,
     CHATGPT_MAX_READY_CHECKS: 30,
-    
+   
     // Per-site configuration storage
     SITE_SETTINGS_KEY: 'site_styler_settings_v2',
-    
+   
     // 🆕 Button visibility control
     BUTTON_VISIBLE_BY_DEFAULT: false,
     BUTTON_VISIBILITY_KEY: 'site_styler_button_visible'
@@ -39,10 +40,10 @@ const SITES = {
         name: 'ChatGPT',
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
         styleID: 'chatgpt-enhanced-styles',
-        needsReadyCheck: true,
+        needsReadyCheck: false,
         readySelector: 'main, [class*="conversation"], #__next',
-        aggressiveReapply: true,
-        enabledByDefault: true
+        aggressiveReapply: false,
+        enabledByDefault: false
     },
     'claude.ai': {
         name: 'Claude AI',
@@ -57,6 +58,15 @@ const SITES = {
         name: 'Reverso Context',
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/reverso%20context%20style.css',
         styleID: 'reverso-context-enhanced-styles',
+        needsReadyCheck: false,
+        readySelector: 'body',
+        aggressiveReapply: false,
+        enabledByDefault: true
+    },
+    'chat.deepseek.com': {
+        name: 'DeepSeek',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/deepseek%20style.css',
+        styleID: 'deepseek-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'body',
         aggressiveReapply: false,
@@ -93,11 +103,11 @@ const state = {
 // 🔍 Browser detection
 (function detectCapabilities() {
     state.hasGrants = typeof GM_xmlhttpRequest !== 'undefined';
-   
+  
     // Simple Berry Browser detection
     const userAgent = navigator.userAgent.toLowerCase();
     state.isBerryBrowser = !state.hasGrants && /android/.test(userAgent);
-   
+  
     if (state.isBerryBrowser) {
         console.log('🍓 Berry Browser detected - using GitHub direct fetch');
         CONFIG.DEBUG_MODE = true;
@@ -108,7 +118,7 @@ const state = {
 const utils = {
     log(message, level = 'info') {
         if (!CONFIG.DEBUG_MODE && level === 'debug') return;
-       
+      
         const emoji = {
             'info': 'ℹ️',
             'success': '✅',
@@ -119,11 +129,11 @@ const utils = {
             'github': '🐙',
             'config': '⚙️'
         }[level] || 'ℹ️';
-       
+      
         const prefix = state.isBerryBrowser ? `${emoji}🍓` : emoji;
         console.log(`${prefix} [${currentSite.name}] ${message}`);
     },
-   
+  
     // 🆕 PER-SITE SETTINGS MANAGEMENT
     getSiteSettings() {
         try {
@@ -134,7 +144,7 @@ const utils = {
             return {};
         }
     },
-   
+  
     saveSiteSettings(settings) {
         try {
             localStorage.setItem(CONFIG.SITE_SETTINGS_KEY, JSON.stringify(settings));
@@ -144,24 +154,24 @@ const utils = {
             return false;
         }
     },
-   
+  
     // Get enabled state for current site
     getSiteEnabledState() {
         const settings = this.getSiteSettings();
         const siteKey = currentDomain;
-        
+       
         // If we have a saved setting for this site, use it
         if (settings[siteKey] !== undefined) {
             this.log(`Using saved setting: ${settings[siteKey] ? 'ENABLED' : 'DISABLED'}`, 'config');
             return settings[siteKey];
         }
-        
+       
         // Otherwise use the default from SITES config
         const defaultState = currentSite.enabledByDefault !== false;
         this.log(`Using default setting: ${defaultState ? 'ENABLED' : 'DISABLED'}`, 'config');
         return defaultState;
     },
-   
+  
     // Save enabled state for current site
     saveSiteEnabledState(isEnabled) {
         const settings = this.getSiteSettings();
@@ -169,12 +179,12 @@ const utils = {
         this.saveSiteSettings(settings);
         this.log(`Saved site setting: ${isEnabled ? 'ENABLED' : 'DISABLED'}`, 'config');
     },
-   
+  
     // Get all site settings (for debug panel)
     getAllSiteSettings() {
         const settings = this.getSiteSettings();
         const result = {};
-        
+       
         Object.keys(SITES).forEach(domain => {
             if (settings[domain] !== undefined) {
                 result[domain] = settings[domain];
@@ -182,10 +192,10 @@ const utils = {
                 result[domain] = SITES[domain].enabledByDefault !== false;
             }
         });
-        
+       
         return result;
     },
-   
+  
     // Reset all site settings to defaults
     resetAllSiteSettings() {
         const defaultSettings = {};
@@ -196,7 +206,7 @@ const utils = {
         this.log('All site settings reset to defaults', 'success');
         return defaultSettings;
     },
-   
+  
     // 🆕 BUTTON VISIBILITY FUNCTIONS
     getButtonVisibility() {
         try {
@@ -206,7 +216,7 @@ const utils = {
             return CONFIG.BUTTON_VISIBLE_BY_DEFAULT;
         }
     },
-    
+   
     saveButtonVisibility(isVisible) {
         try {
             localStorage.setItem(CONFIG.BUTTON_VISIBILITY_KEY, JSON.stringify(isVisible));
@@ -215,14 +225,14 @@ const utils = {
             return false;
         }
     },
-    
+   
     toggleButtonVisibility() {
         const current = this.getButtonVisibility();
         const newState = !current;
         this.saveButtonVisibility(newState);
         return newState;
     },
-   
+  
     throttle(func, delay) {
         let timeoutId;
         let lastExecTime = 0;
@@ -245,7 +255,7 @@ const utils = {
             }
         };
     },
-   
+  
     // localStorage-based storage
     getValue(key, defaultValue) {
         try {
@@ -255,7 +265,7 @@ const utils = {
             return defaultValue;
         }
     },
-   
+  
     setValue(key, value) {
         try {
             localStorage.setItem(key, JSON.stringify(value));
@@ -264,30 +274,30 @@ const utils = {
             return false;
         }
     },
-   
+  
     getCachedCSS() {
         const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
         const cacheData = this.getValue(cacheKey, null);
-   
+  
         if (!cacheData) return null;
-   
+  
         const { css, timestamp, url } = cacheData;
         const now = Date.now();
-   
+  
         if (url !== state.site.styleURL) {
             this.log('CSS URL changed, invalidating cache', 'debug');
             return null;
         }
-   
+  
         if (now - timestamp > CONFIG.CACHE_DURATION) {
             this.log('Cache expired', 'debug');
             return null;
         }
-   
+  
         this.log(`Using cached CSS (${Math.round((now - timestamp)/60000)}min old)`, 'debug');
         return css;
     },
-   
+  
     setCachedCSS(css) {
         const cacheKey = CONFIG.CACHE_KEY_PREFIX + state.site.name;
         const cacheData = {
@@ -297,17 +307,17 @@ const utils = {
         };
         return this.setValue(cacheKey, cacheData);
     },
-   
+  
     clearCache() {
         const keys = Object.keys(localStorage).filter(k => k.startsWith(CONFIG.CACHE_KEY_PREFIX));
         keys.forEach(k => localStorage.removeItem(k));
         this.log(`Cleared ${keys.length} cache entries`, 'success');
         return keys.length;
     },
-   
+  
     async waitForElement(selector, timeout = 10000) {
         const startTime = Date.now();
-   
+  
         while (Date.now() - startTime < timeout) {
             const element = document.querySelector(selector);
             if (element) {
@@ -315,30 +325,30 @@ const utils = {
             }
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-   
+  
         return null;
     },
-   
+  
     async waitForPageReady() {
         if (!state.site.needsReadyCheck) {
             return true;
         }
 
         this.log('Waiting for page to be ready...', 'debug');
-   
+  
         const element = await this.waitForElement(state.site.readySelector, 10000);
-   
+  
         if (element) {
             this.log('Page is ready', 'success');
-       
+      
             if (state.isBerryBrowser && currentDomain === 'chatgpt.com') {
                 this.log('Applying ChatGPT Berry Browser delay...', 'debug');
                 await new Promise(resolve => setTimeout(resolve, CONFIG.BERRY_INITIAL_DELAY));
             }
-       
+      
             return true;
         }
-   
+  
         this.log('Page ready check timed out, continuing anyway', 'warning');
         return false;
     }
@@ -351,7 +361,7 @@ state.enabled = utils.getSiteEnabledState();
 const cssLoader = {
     async fetchExternalCSS() {
         state.fetchAttempts++;
-       
+      
         const cachedCSS = utils.getCachedCSS();
         if (cachedCSS) {
             state.cssContent = cachedCSS;
@@ -360,7 +370,7 @@ const cssLoader = {
 
         utils.log(`Fetch attempt #${state.fetchAttempts}`, 'info');
         utils.log(`GitHub URL: ${state.site.styleURL}`, 'debug');
-       
+      
         if (state.hasGrants) {
             try {
                 const css = await this.fetchViaGM();
@@ -371,7 +381,7 @@ const cssLoader = {
                 utils.log(`GM fetch failed: ${error.message}`, 'error');
             }
         }
-       
+      
         if (state.isBerryBrowser) {
             try {
                 const css = await this.fetchForBerryBrowser();
@@ -384,7 +394,7 @@ const cssLoader = {
                 utils.log(`Berry fetch failed: ${berryError.message}`, 'error');
             }
         }
-       
+      
         try {
             const css = await this.fetchDirect();
             utils.setCachedCSS(css);
@@ -392,7 +402,7 @@ const cssLoader = {
             return css;
         } catch (directError) {
             utils.log(`Direct fetch failed: ${directError.message}`, 'debug');
-           
+          
             try {
                 const css = await this.fetchViaCORSProxy();
                 utils.setCachedCSS(css);
@@ -404,7 +414,7 @@ const cssLoader = {
             }
         }
     },
-   
+  
     fetchViaGM() {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
@@ -433,51 +443,51 @@ const cssLoader = {
             });
         });
     },
-   
+  
     async fetchDirect() {
         utils.log('Trying direct GitHub fetch...', 'github');
-       
+      
         const response = await fetch(state.site.styleURL, {
             method: 'GET',
             headers: { 'Accept': 'text/css,*/*' },
             mode: 'cors',
             cache: 'no-store'
         });
-       
+      
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-       
+      
         const css = await response.text();
-       
+      
         if (!css || css.trim().length === 0) {
             throw new Error('Empty CSS response');
         }
-       
+      
         utils.log(`Fetched ${css.length} chars from GitHub`, 'success');
         return css;
     },
-   
+  
     async fetchForBerryBrowser() {
         utils.log('Berry: Starting GitHub fetch...', 'berry');
-       
+      
         const strategies = [
             { url: state.site.styleURL, mode: 'no-cors', desc: 'GitHub no-cors' },
             { url: state.site.styleURL, mode: 'cors', desc: 'GitHub cors' }
         ];
-       
+      
         for (const strategy of strategies) {
             utils.log(`Berry: Trying ${strategy.desc}...`, 'debug');
-           
+          
             try {
                 const response = await fetch(strategy.url, {
                     method: 'GET',
                     mode: strategy.mode,
                     cache: 'no-store'
                 });
-               
+              
                 const css = await response.text();
-               
+              
                 if (css && css.trim().length > 10) {
                     utils.log(`Berry (${strategy.desc}): Got ${css.length} chars`, 'success');
                     return css;
@@ -487,34 +497,34 @@ const cssLoader = {
                 continue;
             }
         }
-       
+      
         throw new Error('All GitHub fetch strategies failed');
     },
-   
+  
     async fetchViaCORSProxy() {
         const proxies = [
             `https://api.allorigins.win/raw?url=${encodeURIComponent(state.site.styleURL)}`,
             `https://corsproxy.io/?${encodeURIComponent(state.site.styleURL)}`,
             `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(state.site.styleURL)}`
         ];
-       
+      
         for (let i = 0; i < proxies.length; i++) {
             const proxyUrl = proxies[i];
             try {
                 utils.log(`Trying proxy ${i + 1}/${proxies.length} for GitHub`, 'debug');
-               
+              
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: { 'Accept': 'text/css,*/*' },
                     cache: 'no-store'
                 });
-               
+              
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-               
+              
                 const css = await response.text();
-               
+              
                 if (css && css.trim().length > 0) {
                     utils.log(`Fetched ${css.length} chars via proxy`, 'success');
                     return css;
@@ -527,7 +537,7 @@ const cssLoader = {
                 continue;
             }
         }
-       
+      
         throw new Error('All proxies failed');
     }
 };
@@ -551,7 +561,7 @@ const styleManager = {
 
         try {
             await utils.waitForPageReady();
-       
+      
             if (!state.cssContent) {
                 utils.log('Fetching CSS from GitHub...', 'info');
                 await cssLoader.fetchExternalCSS();
@@ -567,49 +577,49 @@ const styleManager = {
                 state.isLoading = false;
                 return true;
             }
-           
+          
             if (await this.injectViaBlob()) {
                 state.appliedMethod = 'blob-link';
                 utils.log('✅ Styles applied via blob link', 'success');
                 state.isLoading = false;
                 return true;
             }
-       
+      
             throw new Error('All injection methods failed');
-       
+      
         } catch (error) {
             utils.log(`Failed to apply styles: ${error.message}`, 'error');
             state.isLoading = false;
             return false;
         }
     },
-   
+  
     async injectViaBlob() {
         if (!document.head) return false;
-   
+  
         const blob = new Blob([state.cssContent], { type: 'text/css' });
         const blobUrl = URL.createObjectURL(blob);
-   
+  
         const link = document.createElement('link');
         link.id = state.site.styleID;
         link.rel = 'stylesheet';
         link.type = 'text/css';
         link.href = blobUrl;
-   
+  
         return new Promise((resolve) => {
             link.onload = () => {
                 state.styleElement = link;
                 resolve(true);
             };
-       
+      
             link.onerror = () => {
                 link.remove();
                 URL.revokeObjectURL(blobUrl);
                 resolve(false);
             };
-       
+      
             document.head.appendChild(link);
-       
+      
             setTimeout(() => {
                 if (link.sheet) {
                     state.styleElement = link;
@@ -620,15 +630,15 @@ const styleManager = {
             }, 1000);
         });
     },
-   
+  
     injectViaStyle() {
         if (!document.head) return false;
-   
+  
         const style = document.createElement('style');
         style.id = state.site.styleID;
         style.type = 'text/css';
         style.textContent = state.cssContent;
-   
+  
         try {
             document.head.appendChild(style);
             state.styleElement = style;
@@ -637,7 +647,7 @@ const styleManager = {
             return false;
         }
     },
-   
+  
     remove() {
         const existingStyle = document.getElementById(state.site.styleID);
         if (existingStyle) {
@@ -646,15 +656,15 @@ const styleManager = {
             }
             existingStyle.remove();
         }
-   
+  
         state.styleElement = null;
         utils.log('Styles removed', 'debug');
     },
-   
+  
     isApplied() {
         return !!document.getElementById(state.site.styleID);
     },
-   
+  
     async forceReapply() {
         if (state.enabled && !this.isApplied()) {
             utils.log('Force reapplying styles', 'debug');
@@ -674,10 +684,10 @@ const observerManager = {
         } else {
             this.createStandardObserver();
         }
-   
+  
         utils.log('Observer started', 'debug');
     },
-   
+  
     createStandardObserver() {
         const throttledReapply = utils.throttle(() => {
             styleManager.forceReapply();
@@ -707,31 +717,31 @@ const observerManager = {
             subtree: false
         });
     },
-   
+  
     createAggressiveObserver() {
         let checkCount = 0;
         const maxChecks = 50;
-   
+  
         const checkAndReapply = async () => {
             if (checkCount++ > maxChecks) {
                 clearInterval(intervalId);
                 utils.log('Aggressive observer stopped', 'debug');
                 return;
             }
-       
+      
             if (!styleManager.isApplied() && state.enabled) {
                 utils.log('Style missing, reapplying...', 'debug');
                 await styleManager.forceReapply();
             }
         };
-   
+  
         const intervalId = setInterval(checkAndReapply, 2000);
-   
+  
         state.observer = {
             disconnect: () => clearInterval(intervalId)
         };
     },
-   
+  
     cleanup() {
         if (state.observer) {
             if (state.observer.disconnect) {
@@ -748,19 +758,19 @@ const uiManager = {
         this.createFloatingButton();
         this.createSettingsPanel();
     },
-   
+  
     createFloatingButton() {
         const button = document.createElement('div');
         button.id = 'site-styler-btn';
-        
+       
         // 🆕 Check if button should be visible
         const isButtonVisible = utils.getButtonVisibility();
-        
+       
         // 🆕 Add visibility class for CSS targeting
         if (!isButtonVisible) {
             button.classList.add('hidden-button');
         }
-        
+       
         button.style.cssText = `
             position: fixed;
             bottom: 80px;
@@ -782,26 +792,26 @@ const uiManager = {
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         `;
-        
+       
         // 🆕 Apply hidden state if needed
         if (!isButtonVisible) {
             button.style.transform = 'translateX(100px) scale(0.8)';
             button.style.opacity = '0';
             button.style.pointerEvents = 'none';
         }
-        
+       
         this.updateButtonState(button);
-        
+       
         // 🆕 Add button animation styles
         this.addButtonAnimations();
-   
+  
         // Click: Toggle current site styles
         button.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
             this.toggleCurrentSite();
         });
-   
+  
         // Long press: Show settings panel
         let longPressTimer;
         button.addEventListener('touchstart', (e) => {
@@ -809,11 +819,11 @@ const uiManager = {
                 this.toggleSettingsPanel();
             }, 1000);
         });
-       
+      
         button.addEventListener('touchend', () => {
             clearTimeout(longPressTimer);
         });
-   
+  
         const addButton = () => {
             if (document.body) {
                 document.body.appendChild(button);
@@ -823,10 +833,10 @@ const uiManager = {
         };
         addButton();
     },
-   
+  
     addButtonAnimations() {
         if (!document.head || document.getElementById('button-animations')) return;
-       
+      
         const style = document.createElement('style');
         style.id = 'button-animations';
         style.textContent = `
@@ -835,7 +845,7 @@ const uiManager = {
                 opacity: 0 !important;
                 pointer-events: none !important;
             }
-            
+           
             #site-styler-btn:not(.hidden-button) {
                 transform: translateX(0) scale(1) !important;
                 opacity: 1 !important;
@@ -844,15 +854,15 @@ const uiManager = {
         `;
         document.head.appendChild(style);
     },
-   
+  
     updateButtonState(button) {
         if (!button) button = document.getElementById('site-styler-btn');
         if (!button) return;
-   
+  
         button.innerHTML = state.enabled ? '🎨' : '🚫';
         button.style.opacity = state.enabled ? '1' : '0.6';
         button.title = `${state.site.name}: ${state.enabled ? 'ON' : 'OFF'}\nLong press for settings`;
-       
+      
         // Add pulse animation when loading
         if (state.isLoading) {
             button.style.animation = 'pulse 1.5s infinite';
@@ -860,11 +870,11 @@ const uiManager = {
             button.style.animation = 'none';
         }
     },
-   
+  
     toggleCurrentSite() {
         state.enabled = !state.enabled;
         utils.saveSiteEnabledState(state.enabled);
-       
+      
         if (state.enabled) {
             styleManager.apply();
             observerManager.setup();
@@ -872,20 +882,20 @@ const uiManager = {
             styleManager.remove();
             observerManager.cleanup();
         }
-       
+      
         this.updateButtonState();
         this.showToast(`${state.site.name}: ${state.enabled ? 'ON' : 'OFF'}`);
     },
-   
+  
     // 🆕 Toggle button visibility
     toggleButtonVisibility() {
         const button = document.getElementById('site-styler-btn');
         const currentVisibility = utils.getButtonVisibility();
         const newVisibility = !currentVisibility;
-        
+       
         // Save the new visibility setting
         utils.saveButtonVisibility(newVisibility);
-        
+       
         // Update button class for CSS targeting
         if (button) {
             if (newVisibility) {
@@ -896,11 +906,11 @@ const uiManager = {
                 button.style.pointerEvents = 'none';
             }
         }
-        
+       
         this.showToast(`Button ${newVisibility ? 'shown' : 'hidden'}`);
         return newVisibility;
     },
-   
+  
     createSettingsPanel() {
         // Create panel container
         const panel = document.createElement('div');
@@ -926,7 +936,7 @@ const uiManager = {
             font-family: system-ui, -apple-system, sans-serif;
             animation: slideIn 0.3s ease;
         `;
-       
+      
         // Title
         const title = document.createElement('div');
         title.textContent = '🎨 Site Styler Settings';
@@ -938,7 +948,7 @@ const uiManager = {
             padding-bottom: 10px;
         `;
         panel.appendChild(title);
-       
+      
         // Current site info
         const currentSiteInfo = document.createElement('div');
         currentSiteInfo.innerHTML = `
@@ -957,7 +967,7 @@ const uiManager = {
             </div>
         `;
         panel.appendChild(currentSiteInfo);
-       
+      
         // 🆕 BUTTON VISIBILITY SECTION
         const buttonSection = document.createElement('div');
         buttonSection.style.cssText = `
@@ -966,7 +976,7 @@ const uiManager = {
             border-radius: 8px;
             margin: 10px 0;
         `;
-        
+       
         const buttonTitle = document.createElement('div');
         buttonTitle.textContent = 'Button Settings';
         buttonTitle.style.cssText = `
@@ -976,7 +986,7 @@ const uiManager = {
             color: #90CAF9;
         `;
         buttonSection.appendChild(buttonTitle);
-        
+       
         // Current button state
         const buttonState = document.createElement('div');
         buttonState.style.cssText = `
@@ -994,7 +1004,7 @@ const uiManager = {
             </span>
         `;
         buttonSection.appendChild(buttonState);
-        
+       
         // Toggle button visibility button
         const toggleButtonBtn = document.createElement('button');
         toggleButtonBtn.id = 'toggle-button-visibility';
@@ -1010,14 +1020,14 @@ const uiManager = {
             font-size: 13px;
             transition: background 0.3s;
         `;
-        
+       
         toggleButtonBtn.addEventListener('click', () => {
             const newVisibility = this.toggleButtonVisibility();
-            
+           
             // Update button text and color
             toggleButtonBtn.textContent = newVisibility ? 'Hide Button' : 'Show Button';
             toggleButtonBtn.style.background = newVisibility ? '#f44336' : '#4CAF50';
-            
+           
             // Update status text
             buttonState.innerHTML = `
                 <span>Floating button:</span>
@@ -1026,10 +1036,10 @@ const uiManager = {
                 </span>
             `;
         });
-        
+       
         buttonSection.appendChild(toggleButtonBtn);
         panel.appendChild(buttonSection);
-       
+      
         // All sites settings
         const allSitesTitle = document.createElement('div');
         allSitesTitle.textContent = 'ALL SITES';
@@ -1040,7 +1050,7 @@ const uiManager = {
             margin-bottom: 10px;
         `;
         panel.appendChild(allSitesTitle);
-       
+      
         const sitesList = document.createElement('div');
         sitesList.id = 'sites-list';
         sitesList.style.cssText = `
@@ -1049,7 +1059,7 @@ const uiManager = {
             gap: 8px;
         `;
         panel.appendChild(sitesList);
-       
+      
         // Actions
         const actions = document.createElement('div');
         actions.style.cssText = `
@@ -1059,7 +1069,7 @@ const uiManager = {
             padding-top: 15px;
             border-top: 1px solid rgba(255,255,255,0.2);
         `;
-       
+      
         const resetBtn = document.createElement('button');
         resetBtn.textContent = 'Reset All';
         resetBtn.style.cssText = `
@@ -1080,7 +1090,7 @@ const uiManager = {
                 this.showToast('All settings reset');
             }
         });
-       
+      
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
         closeBtn.style.cssText = `
@@ -1095,36 +1105,36 @@ const uiManager = {
         closeBtn.addEventListener('click', () => {
             this.toggleSettingsPanel();
         });
-       
+      
         actions.appendChild(resetBtn);
         actions.appendChild(closeBtn);
         panel.appendChild(actions);
-       
+      
         // Add panel to body
         document.body.appendChild(panel);
-       
+      
         // Add event listeners
         document.getElementById('toggle-current-site').addEventListener('click', () => {
             this.toggleCurrentSite();
             this.refreshSettingsPanel();
         });
-       
+      
         // Initial refresh of sites list
         this.refreshSettingsPanel();
     },
-   
+  
     refreshSettingsPanel() {
         const sitesList = document.getElementById('sites-list');
         if (!sitesList) return;
-       
+      
         const allSettings = utils.getAllSiteSettings();
         sitesList.innerHTML = '';
-       
+      
         Object.keys(SITES).forEach(domain => {
             const site = SITES[domain];
             const isEnabled = allSettings[domain];
             const isCurrent = domain === currentDomain;
-           
+          
             const siteItem = document.createElement('div');
             siteItem.style.cssText = `
                 display: flex;
@@ -1135,7 +1145,7 @@ const uiManager = {
                 border-radius: 6px;
                 border: 1px solid rgba(255,255,255,0.1);
             `;
-           
+          
             const siteName = document.createElement('div');
             siteName.textContent = site.name;
             siteName.style.cssText = `
@@ -1143,7 +1153,7 @@ const uiManager = {
                 align-items: center;
                 gap: 8px;
             `;
-           
+          
             if (isCurrent) {
                 const currentBadge = document.createElement('span');
                 currentBadge.textContent = '●';
@@ -1153,7 +1163,7 @@ const uiManager = {
                 `;
                 siteName.prepend(currentBadge);
             }
-           
+          
             const toggleBtn = document.createElement('button');
             toggleBtn.textContent = isEnabled ? 'ON' : 'OFF';
             toggleBtn.style.cssText = `
@@ -1166,12 +1176,12 @@ const uiManager = {
                 font-size: 11px;
                 min-width: 50px;
             `;
-           
+          
             toggleBtn.addEventListener('click', () => {
                 const settings = utils.getSiteSettings();
                 settings[domain] = !isEnabled;
                 utils.saveSiteSettings(settings);
-               
+              
                 // If toggling current site, update UI immediately
                 if (domain === currentDomain) {
                     state.enabled = !isEnabled;
@@ -1184,16 +1194,16 @@ const uiManager = {
                     }
                     this.updateButtonState();
                 }
-               
+              
                 this.refreshSettingsPanel();
                 this.showToast(`${site.name}: ${!isEnabled ? 'ENABLED' : 'DISABLED'}`);
             });
-           
+          
             siteItem.appendChild(siteName);
             siteItem.appendChild(toggleBtn);
             sitesList.appendChild(siteItem);
         });
-       
+      
         // Update current site toggle button
         const currentToggleBtn = document.getElementById('toggle-current-site');
         if (currentToggleBtn) {
@@ -1201,11 +1211,11 @@ const uiManager = {
             currentToggleBtn.style.background = state.enabled ? '#4CAF50' : '#f44336';
         }
     },
-   
+  
     toggleSettingsPanel() {
         const panel = document.getElementById('site-styler-settings');
         if (!panel) return;
-       
+      
         if (panel.style.display === 'flex') {
             panel.style.display = 'none';
         } else {
@@ -1213,7 +1223,7 @@ const uiManager = {
             this.refreshSettingsPanel();
         }
     },
-   
+  
     showDebugInfo() {
         const allSettings = utils.getAllSiteSettings();
         const info = `
@@ -1229,11 +1239,11 @@ CSS Content: ${state.cssContent ? state.cssContent.length + ' chars' : 'None'}
 Applied Method: ${state.appliedMethod || 'None'}
 Style Applied: ${styleManager.isApplied()}
         `.trim();
-       
+      
         console.log(info);
         this.showToast('Debug info logged to console');
     },
-   
+  
     showToast(message) {
         const toast = document.createElement('div');
         toast.style.cssText = `
@@ -1251,9 +1261,9 @@ Style Applied: ${styleManager.isApplied()}
             max-width: 300px;
             word-wrap: break-word;
         `;
-       
+      
         toast.textContent = message;
-       
+      
         if (document.body) {
             document.body.appendChild(toast);
             setTimeout(() => {
@@ -1271,12 +1281,12 @@ const navigationManager = {
         window.addEventListener('popstate', this.handleURLChange);
         window.addEventListener('hashchange', this.handleURLChange);
     },
-   
+  
     handleURLChange: utils.throttle(() => {
         if (location.href !== state.currentURL) {
             state.currentURL = location.href;
             utils.log(`URL changed: ${state.currentURL}`, 'debug');
-       
+      
             if (state.enabled) {
                 setTimeout(() => styleManager.forceReapply(), 300);
             }
@@ -1287,18 +1297,18 @@ const navigationManager = {
 // 🚀 Main application
 const app = {
     async init() {
-        utils.log(`🚀 Initializing ${state.site.name} Styler v5.2`, 'info');
+        utils.log(`🚀 Initializing ${state.site.name} Styler v5.3`, 'info');
         utils.log(`Mode: ${state.isBerryBrowser ? '🍓 Berry Browser' : 'Standard'}`, 'info');
         utils.log(`Source: GitHub Raw URLs`, 'github');
         utils.log(`Site setting: ${state.enabled ? 'ENABLED' : 'DISABLED'}`, 'config');
         utils.log(`Button: ${utils.getButtonVisibility() ? 'VISIBLE' : 'HIDDEN'}`, 'config');
-   
+  
         // Add CSS animations
         this.addPulseAnimation();
-   
+  
         // Initial delay
         const initialDelay = state.isBerryBrowser ? 2000 : 500;
-   
+  
         setTimeout(async () => {
             if (state.enabled) {
                 await this.applyWithRetry();
@@ -1307,18 +1317,18 @@ const app = {
             uiManager.setup();
             navigationManager.init();
             this.setupEventListeners();
-       
+      
             utils.log(`Initialization complete. Status: ${state.enabled ? 'ENABLED ✅' : 'DISABLED ❌'}`, 'success');
         }, initialDelay);
     },
-   
+  
     async applyWithRetry() {
         if (!state.enabled) return;
 
         for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
             try {
                 utils.log(`Apply attempt ${attempt}/${CONFIG.MAX_RETRIES}`, 'debug');
-           
+          
                 if (await styleManager.apply()) {
                     utils.log('Styles successfully applied from GitHub!', 'success');
                     return;
@@ -1331,10 +1341,10 @@ const app = {
                 await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
             }
         }
-   
+  
         utils.log('Max retries reached', 'warning');
     },
-   
+  
     setupEventListeners() {
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && state.enabled) {
@@ -1352,10 +1362,10 @@ const app = {
             observerManager.cleanup();
         });
     },
-   
+  
     addPulseAnimation() {
         if (!document.head) return;
-       
+      
         const style = document.createElement('style');
         style.textContent = `
             @keyframes pulse {
