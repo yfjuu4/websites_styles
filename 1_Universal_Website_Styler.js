@@ -65,7 +65,7 @@ const SITES = {
     },
     'chat.deepseek.com': {
         name: 'DeepSeek',
-        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/deepseek%20style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/deepseek%20style.css',
         styleID: 'deepseek-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'body',
