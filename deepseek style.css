@@ -1,8 +1,41 @@
+[data-ds-dark-theme] ._0fcaa63
+{
+    display: none !important;
+}
+
 .ds-markdown>:first-child
 {
-    Color:green;
+    Color:#a49502;
+    font-size: 18px;
+}
+
+strong {
+    Color:#bc0000;
+    font-size: 18px;
+}
+
+.ds-markdown-paragraph:not(strong){
+    Color:#a49502;
+    font-size: 18px !important;
+}
+
+.ds-markdown code {
+    background-color: #aa0000;
+    Color: #000000;
+}
+
+[data-ds-dark-theme] ._48edb25 .e1675d8b {
+    color: #a6a6a6;
+    Color:#a49502;
+    font-size: 18px;
+}
+
+[data-ds-dark-theme] .fbb737a4 {
+    color: #01b0bd;
+    background-color: #414158;
+    font-size: 18px !important;
 }
 
 html {
-    background-color: #d42525;
+    background-color: black;
 }
