@@ -43,7 +43,7 @@ const SITES = {
         needsReadyCheck: false,
         readySelector: 'main, [class*="conversation"], #__next',
         aggressiveReapply: false,
-        enabledByDefault: true
+        enabledByDefault: false
     },
     'claude.ai': {
         name: 'Claude AI',
