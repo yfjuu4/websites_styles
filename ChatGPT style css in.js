@@ -63,8 +63,7 @@ span:nth-child(26),
 a[role="menuitem"],
 .gap-6:nth-child(1),
 button[data-testid="share-chat-button"],
-.pt-\(--sidebar-section-first-margin-top\):nth-child(3),
-.sm\:items-center
+.pt-\(--sidebar-section-first-margin-top\):nth-child(3)
 ,.mb-\[var\(--sidebar-collapsed-section-margin-bottom\)\]
 ,.lg\:hidden
 ,.z-30
