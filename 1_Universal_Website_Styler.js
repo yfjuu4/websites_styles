@@ -7,7 +7,7 @@
 // @match        https://claude.ai/*
 // @match        https://context.reverso.net/*
 // @match        https://chat.deepseek.com/*
-// @match        https://dictionary.cambridge.org/us/dictionary/*
+// @match        https://dictionary.cambridge.org/*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // ==/UserScript==
