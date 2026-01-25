@@ -7,6 +7,7 @@
 // @match        https://claude.ai/*
 // @match        https://context.reverso.net/*
 // @match        https://chat.deepseek.com/*
+// @match        https://dictionary.cambridge.org/us/dictionary/*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // ==/UserScript==
@@ -38,7 +39,7 @@ const CONFIG = {
 const SITES = {
     'chatgpt.com': {
         name: 'ChatGPT',
-        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/ChatGpt_style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/main/ChatGpt_style.css',
         styleID: 'chatgpt-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'main, [class*="conversation"], #__next',
@@ -47,7 +48,7 @@ const SITES = {
     },
     'claude.ai': {
         name: 'Claude AI',
-        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/Claude_AI_style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/main/Claude_AI_style.css',
         styleID: 'claude-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'body',
@@ -56,7 +57,7 @@ const SITES = {
     },
     'context.reverso.net': {
         name: 'Reverso Context',
-        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/main/reverso%20context%20style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/main/reverso%20context%20style.css',
         styleID: 'reverso-context-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'body',
@@ -65,7 +66,16 @@ const SITES = {
     },
     'chat.deepseek.com': {
         name: 'DeepSeek',
-        styleURL: 'https://raw.githubusercontent.com/yfjuu4/ai-chat-styles/refs/heads/main/deepseek%20style.css',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/refs/heads/main/deepseek%20style.css',
+        styleID: 'deepseek-enhanced-styles',
+        needsReadyCheck: false,
+        readySelector: 'body',
+        aggressiveReapply: false,
+        enabledByDefault: true
+    }
+    'dictionary.cambridge.org': {
+        name: 'DeepSeek',
+        styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/refs/heads/main/cambridge dict.css',
         styleID: 'deepseek-enhanced-styles',
         needsReadyCheck: false,
         readySelector: 'body',
