@@ -72,7 +72,7 @@ const SITES = {
         readySelector: 'body',
         aggressiveReapply: false,
         enabledByDefault: true
-    }
+    },
     'dictionary.cambridge.org': {
         name: 'DeepSeek',
         styleURL: 'https://raw.githubusercontent.com/yfjuu4/websites_styles/refs/heads/main/cambridge dict.css',
