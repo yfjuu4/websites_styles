@@ -75,10 +75,14 @@ button[data-testid="share-chat-button"],
 }
 
 #stage-popover-sidebar{
-    max-width:350px;
-    width:350px;
+    max-width:300px;
+    width:300px;
 }
 /*-----------------------------------------*/
+.block > .h-full{
+    background-color: black;
+    border: 2px #00b91e solid;
+}
 .flex > div > .text-sm {
     font-size: 20px;
 }
