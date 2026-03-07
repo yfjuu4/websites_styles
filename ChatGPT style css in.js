@@ -65,7 +65,6 @@ button[data-testid="share-chat-button"],
 .pt-\(--sidebar-section-first-margin-top\):nth-child(3)
 , .sm\:items-center
 ,.mb-\[var\(--sidebar-collapsed-section-margin-bottom\)\]
-,#page-header
 ,.-my-1\.5
 ,.not-group-data-disabled\:text-token-text-tertiary
 ,.trailing text-token-text-tertiary
@@ -709,6 +708,8 @@ li > .cursor-pointer .text-sm {
     border: 1px #a300a7 solid;
     place-self: center;
     padding:0;
+    width: -webkit-fill-available;
+    max-width: max-content;
 }
 /*-----------------------------------------*/
 .pt-3 {
