@@ -77,9 +77,6 @@ button[data-testid="share-chat-button"]
     display: none !important;
 }
 /*-----------------------------------------*/
-.bottom-full {
-    border: 1px #e10000 solid;
-}
 .flex > div > .text-sm {
     font-size: 20px;
 }
@@ -689,10 +686,6 @@ li > .cursor-pointer .text-sm {
     align-self: center;
     margin: 0;
 }
-#prompt-textarea > p {
-    Color: #cd0101;
-    font-size: 20px;
-}
 #prompt-textarea {
     margin: 0;
     padding: 0px;
@@ -778,7 +771,6 @@ p > em {
 }
 .\@w-lg\/main\:\[--thread-content-max-width\:48rem\] {
     --thread-content-max-width: 1093px;
-    border: 1px #e10000 solid;
 }
 .composer-submit-btn {
     background-color: #d8cbcb;
@@ -824,6 +816,10 @@ p > em {
 }
 .w-\[var\(--sidebar-width\)\] {
     width: 300px;
+}
+.wcDTda_prosemirror-parent p {
+    Color: #e9c6ff;
+    font-size: 20px;
 }
 `;
 // State management
