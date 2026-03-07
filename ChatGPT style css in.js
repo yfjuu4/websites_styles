@@ -16,7 +16,7 @@ const CONFIG = {
     MAX_RETRIES: 50,
     OBSERVER_THROTTLE: 250
 };
-const USER_CSS = String.raw`
+    const USER_CSS = String.raw`
 /* Target the entire scrollbar and set its width */
 ::-webkit-scrollbar {
 width: 9px;
@@ -55,7 +55,6 @@ div > div:nth-child(3) > .active\:opacity-90,
 [data-testid="conversation-options-button"],
 .pe-8:is(:nth-child(1), :nth-child(4), :nth-child(6), :nth-child(8)),
 .items-center:nth-child(9),
-.bg-token-bg-elevated-secondary.sticky.bottom-0.z-30,
 .screen-arch\:sticky,
 span:nth-child(26),
 .touch\:hidden:nth-child(11),
@@ -64,30 +63,21 @@ a[role="menuitem"],
 .gap-6:nth-child(1),
 button[data-testid="share-chat-button"],
 .pt-\(--sidebar-section-first-margin-top\):nth-child(3)
+, .sm\:items-center
 ,.mb-\[var\(--sidebar-collapsed-section-margin-bottom\)\]
-,.lg\:hidden
-,.z-30
+,#page-header
+,.-my-1\.5
+,.not-group-data-disabled\:text-token-text-tertiary
+,.trailing text-token-text-tertiary
+,.flex > .group:nth-child(3)
 ,.mt-2
-,.group\/sidebar-expando-section:nth-child(6)
-,.pb-\[calc\(var\(--sidebar-section-margin-top\)-var\(--sidebar-section-first-margin-top\)\)\]
-{
+/* ,.group\/sidebar-expando-section:nth-child(6) */
+,.pb-\[calc\(var\(--sidebar-section-margin-top\)-var\(--sidebar-section-first-margin-top\)\)\] {
     display: none !important;
 }
-
-#stage-popover-sidebar{
-    max-width:300px;
-    width:300px;
-}
 /*-----------------------------------------*/
-.font-semibold {
-    Color: #cfc5ff !important;
-}
-.dark\:bg-token-bg-elevated-secondary\/80:where(.dark,.dark *):not(:where(.dark .light,.dark .light *)) {
-    justify-content: center;
-}
-.block > .h-full{
-    background-color: black;
-    border: 2px #00b91e solid;
+.bottom-full {
+    border: 1px #e10000 solid;
 }
 .flex > div > .text-sm {
     font-size: 20px;
@@ -215,9 +205,8 @@ tr:nth-child(1) > .text-left {
 .markdown p:not(:first-child) {
     margin-top: 0rem;
 }
-.markdown p {
+.markdown p:not(.w-full) {
     margin-bottom: 0rem;
-    Font-size: 20px;
 }
 .prose :where(ul):not(:where([class~=not-prose] *)) {
     margin-bottom: 0.25em;
@@ -504,7 +493,7 @@ li .cursor-pointer {
     margin-top: 0;
 }
 .px-6 {
-    padding-right: 0 !important;
+    padding-right: unset !important;
 }
 /* .dark :not(.light).popover:not(.radix-side-bottom\:animate-slideUpAndFade[data-side=bottom]) */
 .max-w-md {
@@ -550,6 +539,10 @@ li > .cursor-pointer .text-sm {
 .markdown th,
 .markdown h1 {
     color: #d8c8c8;
+}
+.\@\[64rem\]\:\[--thread-content-max-width\:48rem\] {
+    --thread-content-max-width: 64rem;
+    border: 1px #a00 solid;
 }
 .\@\[70rem\]\:\[--thread-content-margin\:--spacing\(12\)\] {
     --thread-content-margin: calc(var(--spacing)* 0);
@@ -598,16 +591,13 @@ li > .cursor-pointer .text-sm {
 .icon-xl-heavy {
     Color: #d9c7c7 !important;
 }
-.opacity-0 {
-    opacity: 1 !important;
-}
 .group-hover\/turn-messages\:pointer-events-auto:is(:where(.group\/turn-messages):hover *) {
     pointer-events: unset;
 }
 .m-2 {
     margin: 0;
 }
-/*-------------------- SECTION_START: Chat History --------------------*/
+/*-----------------------------------------*/
 .truncate {
     font-size: 20px;
 }
@@ -623,7 +613,7 @@ li > .cursor-pointer .text-sm {
     display: block;
     font-size: 20px;
     font-weight: var(--font-weight-normal);
-    margin: 0 !important;
+    margin: unset !important;
     padding: 0 !important;
 }
 .gap-6/* .gap-6:not(.__menu-item:not(:disabled):not([data-disabled])[data-active]) */ {
@@ -675,7 +665,7 @@ li > .cursor-pointer .text-sm {
 .gap-2\.5:hover {
     Color: black !important;
 }
-/*-------------------- SECTION_End: Chat History --------------------*/
+/*-----------------------------------------*/
 .pt-1\.5 {
     padding-top: 0;
 }
@@ -699,7 +689,7 @@ li > .cursor-pointer .text-sm {
     margin: 0;
 }
 #prompt-textarea > p {
-    Color: #dacccc;
+    Color: #cd0101;
     font-size: 20px;
 }
 #prompt-textarea {
@@ -712,14 +702,13 @@ li > .cursor-pointer .text-sm {
 .min-h-14 {
     min-height: calc(var(--spacing)*7);
 }
-.py-1\.5 {
+.user-message-bubble-color {
     Color: #00bdca;
     background-color: black;
     text-align: center;
     border: 1px #a300a7 solid;
     place-self: center;
     padding:0;
-    max-width: -webkit-fill-available;
 }
 /*-----------------------------------------*/
 .pt-3 {
@@ -727,6 +716,10 @@ li > .cursor-pointer .text-sm {
 }
 .thread-xl\:pt-header-height {
     padding-top: 0;
+}
+.thread-lg\:\[--thread-content-max-width\:48rem\] {
+    --thread-content-max-width: 64rem;
+    border: 1px #e10000 solid;
 }
 .md\:gap-8 {
     gap: 0;
@@ -771,7 +764,7 @@ p > em {
     padding-block: calc(var(--spacing)*0) !important;
 }
 .-mb-9 {
-    margin-bottom: 0 !important;
+    margin-bottom: unset !important;
 }
 #thread-bottom > div > div > div.pointer-events-auto.relative.z-1.flex.h-\[var\(--composer-container-height\,100\%\)\].max-w-full.flex-\[var\(--composer-container-flex\,1\)\].flex-col > div > div > div > div > div > aside {
     padding: 0px !important;
@@ -780,11 +773,21 @@ p > em {
 .\@w-xl\/main\:pt-header-height {
     padding-top: 10px;
 }
+.\@w-lg\/main\:\[--thread-content-max-width\:48rem\] {
+    --thread-content-max-width: 1093px;
+    border: 1px #e10000 solid;
+}
 .composer-submit-btn {
     background-color: #d8cbcb;
     border: 2px #00e125 solid;
 }
-.block > .h-full{
+.group-data-scrolled-from-end\/scrollport\:shadow-sharp-edge-bottom:is(:where(.group\/scrollport)[data-scrolled-from-end] *) {
+    border: 1px #e10000 solid;
+}
+.start-1\/2:dir(ltr) {
+    border: 1px #e10000 solid;
+}
+.block > .h-full {
     background-color: black;
     border: 2px #00b91e solid;
 }
@@ -796,14 +799,16 @@ p > em {
 }
 .markdown-new-styling :is(.markdown h1) {
     margin-bottom: 0;
-    font-size: 21px;
+    font-size: 20px;
     Color:#e10000;
 }
 .markdown-new-styling :is(.markdown h2) {
     margin-top: 0;
     margin-bottom: 0;
 }
-/*========================================================*/
+.group-hover\/turn-messages\:opacity-100 {
+    opacity: 1;
+}
 `;
 // State management
 const state = {
